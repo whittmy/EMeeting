@@ -1,6 +1,6 @@
 #include "Mixer.h"
 
-void EM::mixer(EM::mixer_input *inputs, size_t queues_number,
+void EM::mixer(EM::MixerInput *inputs, size_t queues_number,
                void *output_buffer, size_t *output_size,
                long unsigned int tx_interval_ms)
 {

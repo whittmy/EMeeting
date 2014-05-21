@@ -3,7 +3,7 @@ set (EMSystem_SRCS
 	Error.cpp
 	Messages.cpp
 	Mixer.cpp
-# 	Utils.cpp
+	SignalHandler.cpp
 )
 
 add_library (EMSystem ${EMSystem_SRCS})

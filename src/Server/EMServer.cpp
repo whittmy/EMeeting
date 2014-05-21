@@ -1,22 +1,8 @@
-#include "EMServer.h"
+#include <iostream>
 
-namespace EM {
-	namespace Default {
-		static const uint NR_ALB = 334695;
-
-		namespace Server {
-			static const uint PORT = 10000 + NR_ALB % 10000;
-
-			static const uint FIFO_SIZE           = 10560;
-			static const uint FIFO_LOW_WATERMARK  = 0;
-			static const uint FIFO_HIGH_WATERMARK = FIFO_SIZE;
-
-			static const uint BUFFER_LENGTH    = 10;
-
-			static const uint TX_INTERVAL = 5;
-		}
-	}
-}
+#include "Server/EMServer.h"
+#include "System/Messages.h"
+#include "System/Utils.h"
 
 /**
  * \class ClientQueue
@@ -28,27 +14,26 @@ ClientQueue::ClientQueue(uint fifo_size, uint fifo_low_watermark, uint fifo_high
 	fifo_high_watermark(fifo_high_watermark)
 {}
 
-void ClientQueue::push(EM::mixer_input input)
+void ClientQueue::push(EM::MixerInput input)
 {
 	queue.push(input);
 
-	if (sizeof(EM::mixer_input) * queue.size() > fifo_high_watermark)
+	if (size() > fifo_high_watermark)
 		state = State::Active;
 }
 
-EM::mixer_input ClientQueue::pop()
+EM::MixerInput ClientQueue::pop()
 {
-	EM::mixer_input input = front();
+	EM::MixerInput input = front();
 	queue.pop();
 
-	if (sizeof(EM::mixer_input) * queue.size() < fifo_low_watermark)
+	if (size() < fifo_low_watermark)
 		state = State::Filling;
 
 	return input;
-
 }
 
-EM::mixer_input ClientQueue::front()
+EM::MixerInput ClientQueue::front()
 {
 	return queue.front();
 }
@@ -56,6 +41,11 @@ EM::mixer_input ClientQueue::front()
 bool ClientQueue::full() const
 {
 	return queue.size() == fifo_size;
+}
+
+size_t ClientQueue::size() const
+{
+	return queue.size() * sizeof(EM::MixerInput);
 }
 
 ClientQueue::State ClientQueue::get_current_state() const
@@ -68,15 +58,15 @@ ClientQueue::State ClientQueue::get_current_state() const
  */
 
 EMServer::EMServer() :
-	port(EM::Default::Server::PORT),
+	port(EM::Default::PORT),
 
-	fifo_size(EM::Default::Server::FIFO_SIZE),
-	fifo_low_watermark(EM::Default::Server::FIFO_LOW_WATERMARK),
-	fifo_high_watermark(EM::Default::Server::FIFO_HIGH_WATERMARK),
+	fifo_size(EM::Default::FIFO_SIZE),
+	fifo_low_watermark(EM::Default::FIFO_LOW_WATERMARK),
+	fifo_high_watermark(EM::Default::FIFO_HIGH_WATERMARK),
 
-	buffer_length(EM::Default::Server::BUFFER_LENGTH),
+	buffer_length(EM::Default::BUFFER_LENGTH),
 
-	tx_interval(EM::Default::Server::TX_INTERVAL)
+	tx_interval(EM::Default::TX_INTERVAL)
 {}
 
 void EMServer::set_port(uint port)
@@ -141,5 +131,10 @@ uint EMServer::get_tx_interval() const
 
 void EMServer::start()
 {
+	while (true) {
+	}
+}
 
+void EMServer::quit()
+{
 }

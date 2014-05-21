@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace EM {
-	struct mixer_input {
+	struct MixerInput {
 		void *data;
 		size_t length;
 		size_t consumed;
@@ -15,7 +15,7 @@ namespace EM {
 
 	const int DATA_MS_SIZE = 176;
 
-	void mixer(mixer_input *inputs, size_t queues_number,
+	void mixer(MixerInput *inputs, size_t queues_number,
 	           void *output_buffer, size_t *output_size,
 	           unsigned long tx_interval_ms);
 }

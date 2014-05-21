@@ -14,10 +14,11 @@ public:
 
 	enum class State : uint8_t {Filling, Active};
 
-	void push(EM::mixer_input input);
-	EM::mixer_input pop();
-	EM::mixer_input front();
+	void push(EM::MixerInput input);
+	EM::MixerInput pop();
+	EM::MixerInput front();
 	bool full() const;
+	size_t size() const;
 
 	State get_current_state() const;
 
@@ -26,7 +27,7 @@ private:
 	uint fifo_low_watermark;
 	uint fifo_high_watermark;
 
-	std::queue<EM::mixer_input> queue;
+	std::queue<EM::MixerInput> queue;
 
 	State state;
 };
@@ -53,6 +54,7 @@ public:
 	uint get_tx_interval() const;
 
 	void start();
+	void quit();
 
 private:
 	uint port;

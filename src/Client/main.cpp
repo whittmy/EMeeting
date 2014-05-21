@@ -3,12 +3,26 @@
 #include "Client/EMClient.h"
 #include "System/ArgsManager.h"
 #include "System/Error.h"
+#include "System/SignalHandler.h"
 #include "System/Strings.h"
+
+EMClient *em_client_ptr;
+
+void quit()
+{
+	em_client_ptr->quit();
+	std::cerr << "\nClient quitting.\n";
+	exit(EXIT_SUCCESS);
+}
 
 int main(int argc, char **argv)
 {
 	EMClient em_client(std::cin, std::cout);
 	ArgsManager args_manager(argc - 1, argv + 1);
+
+	em_client_ptr = &em_client;
+
+	SignalHandler::setup((int) SIGINT, quit);
 
 	while (!args_manager.finished()) {
 		switch (args_manager.get_arg()) {

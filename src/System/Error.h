@@ -10,6 +10,8 @@ namespace EM {
 		UnknownArg,
 		ArgLacking,
 		NoServerName,
+
+		SignalSettingFailed,
 	};
 
 	namespace Errors {

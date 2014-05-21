@@ -1,15 +1,27 @@
 #include <iostream>
+#include <csignal>
 
 #include "Server/EMServer.h"
 #include "System/ArgsManager.h"
 #include "System/Error.h"
+#include "System/SignalHandler.h"
 #include "System/Strings.h"
 #include "System/Utils.h"
 
+EMServer em_server;
+
+void quit()
+{
+	em_server.quit();
+	std::cerr << "\nServer quitting.\n";
+	exit(EXIT_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
-	EMServer em_server;
 	ArgsManager args_manager(argc - 1, argv + 1);
+
+	SignalHandler::setup((int) SIGINT, quit);
 
 	while (!args_manager.finished()) {
 		switch (args_manager.get_arg()) {

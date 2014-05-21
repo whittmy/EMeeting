@@ -63,7 +63,8 @@ uint ArgsManager::get_uint()
 std::string ArgsManager::get_string()
 {
 	if (finished()) {
-		std::cerr << EM::Strings::Error << EM::Errors::to_string(EM::Error::ArgLacking)
+		std::cerr << EM::Strings::Error << ":"
+		          << EM::Errors::to_string(EM::Error::ArgLacking)
 		          << ":" << get_previous_arg() << "\n";
 		exit(EXIT_SUCCESS);
 	} else {
@@ -79,7 +80,7 @@ EM::Arg ArgsManager::get_arg()
 	EM::Arg arg = EM::Args::from_string(current_arg);
 
 	if (arg_set(arg)) {
-		std::cerr << EM::Strings::Error
+		std::cerr << EM::Strings::Error << ":"
 		          << EM::Errors::to_string(EM::Error::ConflictingArgs)
 		          << ":" << current_arg << "\n";
 	}

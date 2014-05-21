@@ -16,7 +16,7 @@ namespace EM {
 			const std::string TxInterval        = "-i";
 		}
 
-		const std::string Error = "Error:";
+		const std::string Error = "Error";
 
 		namespace Errors {
 			const std::string ConflictingArgs = "Conflicting arguments";
@@ -26,6 +26,8 @@ namespace EM {
 			const std::string NoServerName    =
 				std::string("No server name given (use ") + Args::ServerName
 				+ std::string(")");
+
+			const std::string SignalSettingFailed = "Signal setting failed";
 		}
 
 		namespace Server {

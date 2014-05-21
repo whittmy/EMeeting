@@ -18,6 +18,7 @@ public:
 	uint get_retransmit_limit() const;
 
 	void start();
+	void quit();
 
 private:
 	std::istream &in;

@@ -1,20 +1,12 @@
-#include "EMClient.h"
-
-namespace EM {
-	namespace Default {
-		namespace Client {
-			const uint PORT = 0;
-
-			const uint RETRANSMIT_LIMIT = 10;
-		}
-	}
-}
+#include "Client/EMClient.h"
+#include "System/Messages.h"
+#include "System/Utils.h"
 
 EMClient::EMClient(std::istream &in, std::ostream &out) :
 	in(in),
 	out(out),
-	port(EM::Default::Client::PORT),
-	retransmit_limit(EM::Default::Client::RETRANSMIT_LIMIT)
+	port(EM::Default::PORT),
+	retransmit_limit(EM::Default::RETRANSMIT_LIMIT)
 {}
 
 void EMClient::set_port(uint port)
@@ -50,4 +42,8 @@ uint EMClient::get_retransmit_limit() const
 void EMClient::start()
 {
 
+}
+
+void EMClient::quit()
+{
 }
