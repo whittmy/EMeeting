@@ -7,7 +7,7 @@
 
 int main(int argc, char **argv)
 {
-	EMClient em_client;
+	EMClient em_client(std::cin, std::cout);
 	ArgsManager args_manager(argc - 1, argv + 1);
 
 	while (!args_manager.finished()) {

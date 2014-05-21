@@ -10,7 +10,9 @@ namespace EM {
 	}
 }
 
-EMClient::EMClient() :
+EMClient::EMClient(std::istream &in, std::ostream &out) :
+	in(in),
+	out(out),
 	port(EM::Default::Client::PORT),
 	retransmit_limit(EM::Default::Client::RETRANSMIT_LIMIT)
 {}

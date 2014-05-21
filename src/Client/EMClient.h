@@ -2,11 +2,12 @@
 #define EMCLIENT_H
 
 #include <string>
+#include <iostream>
 
 class EMClient
 {
 public:
-	EMClient();
+	EMClient(std::istream &in, std::ostream &out);
 
 	void set_port(uint port);
 	uint get_port() const;
@@ -19,6 +20,9 @@ public:
 	void start();
 
 private:
+	std::istream &in;
+	std::ostream &out;
+
 	uint port;
 	std::string server_name;
 
