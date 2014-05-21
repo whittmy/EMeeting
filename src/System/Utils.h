@@ -4,8 +4,6 @@
 #include <string>
 
 namespace EM {
-
-	
 }
 
 #endif // UTILS_H

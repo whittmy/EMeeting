@@ -41,5 +41,7 @@ int main(int argc, char **argv)
 		}
 	}
 
+	em_server.start();
+
 	return EXIT_SUCCESS;
 }

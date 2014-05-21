@@ -84,6 +84,7 @@ EM::Arg ArgsManager::get_arg()
 		          << ":" << current_arg << "\n";
 	}
 
+	args_changed.insert(arg);
 	set_previous_arg(current_arg);
 
 	return arg;

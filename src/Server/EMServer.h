@@ -1,7 +1,35 @@
 #ifndef EMSERVER_H
 #define EMSERVER_H
 
-#include <string>
+#include <queue>
+#include <sys/types.h>
+#include <vector>
+
+#include "System/Mixer.h"
+
+class ClientQueue
+{
+public:
+	ClientQueue(uint fifo_size, uint fifo_low_watermark, uint fifo_high_watermark);
+
+	enum class State : uint8_t {Filling, Active};
+
+	void push(EM::mixer_input input);
+	EM::mixer_input pop();
+	EM::mixer_input front();
+	bool full() const;
+
+	State get_current_state() const;
+
+private:
+	uint fifo_size;
+	uint fifo_low_watermark;
+	uint fifo_high_watermark;
+
+	std::queue<EM::mixer_input> queue;
+
+	State state;
+};
 
 class EMServer
 {
@@ -9,14 +37,22 @@ public:
 	EMServer();
 
 	void set_port(uint port);
+	uint get_port() const;
 
 	void set_fifo_size(int fifo_size);
+	uint get_fifo_size() const;
 	void set_fifo_low_watermark(int fifo_low_watermark);
+	uint get_fifo_low_watermark() const;
 	void set_fifo_high_watermark(int fifo_high_watermark);
+	uint get_fifo_high_watermark() const;
 
 	void set_buffer_length(uint buffer_length);
+	uint get_buffer_length() const;
 
 	void set_tx_interval(uint tx_interval);
+	uint get_tx_interval() const;
+
+	void start();
 
 private:
 	uint port;
@@ -28,6 +64,8 @@ private:
 	uint buffer_length;
 
 	uint tx_interval;
+
+	std::vector<ClientQueue> client_queues;
 };
 
 #endif // EMSERVER_H

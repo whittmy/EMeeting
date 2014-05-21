@@ -39,5 +39,7 @@ int main(int argc, char **argv)
 		return EXIT_SUCCESS;
 	}
 
+	em_client.start();
+
 	return EXIT_SUCCESS;
 }
