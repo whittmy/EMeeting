@@ -1,5 +1,6 @@
-#include <iostream>
+#include <boost/asio.hpp>
 #include <csignal>
+#include <iostream>
 
 #include "Server/EMServer.h"
 #include "System/ArgsManager.h"
@@ -8,11 +9,11 @@
 #include "System/Strings.h"
 #include "System/Utils.h"
 
-EMServer em_server;
+EMServer *em_server_ptr;
 
 void quit()
 {
-	em_server.quit();
+	em_server_ptr->quit();
 	std::cerr << "\nServer quitting.\n";
 	exit(EXIT_SUCCESS);
 }
@@ -22,6 +23,10 @@ int main(int argc, char **argv)
 	ArgsManager args_manager(argc - 1, argv + 1);
 
 	SignalHandler::setup((int) SIGINT, quit);
+
+	boost::asio::io_service io_service;
+	EMServer em_server(io_service);
+	io_service.run();
 
 	while (!args_manager.finished()) {
 		switch (args_manager.get_arg()) {

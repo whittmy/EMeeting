@@ -1,8 +1,12 @@
+#include <boost/bind.hpp>
 #include <iostream>
 
 #include "Server/EMServer.h"
 #include "System/Messages.h"
 #include "System/Utils.h"
+#include "System/TcpConnection.h"
+
+using namespace boost::asio;
 
 /**
  * \class ClientQueue
@@ -54,10 +58,46 @@ ClientQueue::State ClientQueue::get_current_state() const
 }
 
 /**
+ * \class ClientObject
+ */
+
+ClientObject::ClientObject(
+	uint cid,
+	uint fifo_size,
+	uint fifo_low_watermark,
+	uint fifo_high_watermark) :
+
+	cid(cid),
+	queue(fifo_size, fifo_low_watermark, fifo_high_watermark)
+{}
+
+uint ClientObject::get_cid() const
+{
+	return cid;
+}
+
+ClientQueue &ClientObject::get_queue()
+{
+	return queue;
+}
+
+void ClientObject::set_connected(bool connected)
+{
+	this->connected = connected;
+}
+
+bool ClientObject::is_connected() const
+{
+	return connected;
+}
+
+/**
  * \class EMServer
  */
 
-EMServer::EMServer() :
+EMServer::EMServer(boost::asio::io_service &io_service) :
+	AbstractServer(),
+
 	port(EM::Default::PORT),
 
 	fifo_size(EM::Default::FIFO_SIZE),
@@ -66,8 +106,15 @@ EMServer::EMServer() :
 
 	buffer_length(EM::Default::BUFFER_LENGTH),
 
-	tx_interval(EM::Default::TX_INTERVAL)
+	tx_interval(EM::Default::TX_INTERVAL),
+
+	io_service(io_service)
 {}
+
+EMServer::~EMServer()
+{
+	quit();
+}
 
 void EMServer::set_port(uint port)
 {
@@ -131,10 +178,54 @@ uint EMServer::get_tx_interval() const
 
 void EMServer::start()
 {
-	while (true) {
-	}
+	tcp_acceptor = new ip::tcp::acceptor(io_service, ip::tcp::endpoint(ip::tcp::v4(), port));
+	std::cerr << "accepting connections on port " << port << " (IPv4)\n";
+	start_accept();
 }
 
 void EMServer::quit()
 {
+	for (auto obj : clients)
+		delete obj.second;
+}
+
+void EMServer::add_client(uint cid)
+{
+	clients[cid] =
+		new ClientObject(cid,
+		                 get_fifo_size(),
+		                 get_fifo_low_watermark(),
+		                 get_fifo_high_watermark());
+}
+
+void EMServer::on_connection_established(uint cid)
+{
+	clients[cid]->set_connected(true);
+}
+
+void EMServer::on_connection_lost(uint cid)
+{
+	clients[cid]->set_connected(false);
+}
+
+void EMServer::start_accept()
+{
+	TcpConnection::Pointer new_connection =
+		TcpConnection::create(this, tcp_acceptor->get_io_service());
+	std::cerr << "waiting for connections...\n";
+	tcp_acceptor->async_accept(
+		new_connection->get_socket(),
+		boost::bind(&EMServer::handle_accept, this, new_connection,
+		            boost::asio::placeholders::error));
+}
+
+void EMServer::handle_accept(
+	TcpConnection::Pointer new_connection,
+        const boost::system::error_code &error)
+{
+	if (!error)
+		new_connection->start();
+	else
+		std::cerr << "handle_accept: error\n";
+	start_accept();
 }

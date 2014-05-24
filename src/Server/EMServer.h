@@ -2,10 +2,13 @@
 #define EMSERVER_H
 
 #include <queue>
+#include <boost/asio.hpp>
 #include <sys/types.h>
-#include <vector>
+#include <unordered_map>
 
+#include "System/AbstractServer.h"
 #include "System/Mixer.h"
+#include "System/TcpConnection.h"
 
 class ClientQueue
 {
@@ -32,10 +35,28 @@ private:
 	State state;
 };
 
-class EMServer
+class ClientObject
 {
 public:
-	EMServer();
+	ClientObject(uint cid, uint fifo_size, uint fifo_low_watermark, uint fifo_high_watermark);
+
+	uint get_cid() const;
+	ClientQueue &get_queue();
+
+	void set_connected(bool connected);
+	bool is_connected() const;
+
+private:
+	uint cid;
+	ClientQueue queue;
+	bool connected;
+};
+
+class EMServer : public AbstractServer
+{
+public:
+	EMServer(boost::asio::io_service &io_service);
+	~EMServer();
 
 	void set_port(uint port);
 	uint get_port() const;
@@ -56,7 +77,15 @@ public:
 	void start();
 	void quit();
 
+	void add_client(uint cid);
+	void on_connection_established(uint cid);
+	void on_connection_lost(uint cid);
+
 private:
+	void start_accept();
+	void handle_accept(TcpConnection::Pointer new_connection,
+	                   const boost::system::error_code &error);
+
 	uint port;
 
 	uint fifo_size;
@@ -67,7 +96,10 @@ private:
 
 	uint tx_interval;
 
-	std::vector<ClientQueue> client_queues;
+	std::unordered_map<uint, ClientObject *> clients;
+
+	boost::asio::io_service &io_service;
+	boost::asio::ip::tcp::acceptor *tcp_acceptor;
 };
 
 #endif // EMSERVER_H

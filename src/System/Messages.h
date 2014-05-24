@@ -5,20 +5,15 @@
 #include <sys/types.h>
 
 namespace EM {
-	std::string client(uint client_id);
-	std::string clients(const std::string &client,
-	                    size_t current_fifo_size,
-	                    size_t max_fifo_size,
-	                    size_t min_fifo_size_registered,
-	                    size_t max_fifo_size_registered);
-
-	/** These datagrams precede data stream */
-	std::string upload(uint nr);
-	std::string data(uint nr, uint ack, size_t win);
-
-	std::string ack(uint ack, size_t win);
-	std::string retransmit(uint nr);
-	std::string keep_alive();
+	namespace Messages {
+		const std::string Client     = "CLIENT %u\n";
+		const std::string List       = "%s FIFO: %u/%u (min. %u, max. %u)\n";
+		const std::string Upload     = "UPLOAD %u\n";
+		const std::string Data       = "DATA %u %u %u\n";
+		const std::string Ack        = "ACK %u %u\n";
+		const std::string Retransmit = "RETRANSMIT %u\n";
+		const std::string KeepAlive  = "KEEPALIVE\n";
+	}
 }
 
 #endif // MESSAGES_H
