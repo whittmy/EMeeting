@@ -24,9 +24,7 @@ int main(int argc, char **argv)
 
 	SignalHandler::setup((int) SIGINT, quit);
 
-	boost::asio::io_service io_service;
-	EMServer em_server(io_service);
-	io_service.run();
+	EMServer em_server;
 
 	while (!args_manager.finished()) {
 		switch (args_manager.get_arg()) {

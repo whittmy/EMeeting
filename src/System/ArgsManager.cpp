@@ -45,7 +45,7 @@ ArgsManager::ArgsManager(int argc, char **argv)
 
 bool ArgsManager::finished() const
 {
-	return current_index == args.size();
+	return current_index == args.size() && waiting_string.empty();
 }
 
 uint ArgsManager::get_uint()
@@ -55,7 +55,12 @@ uint ArgsManager::get_uint()
 		          << ":" << get_previous_arg() << "\n";
 		exit(EXIT_SUCCESS);
 	} else {
-		uint current_arg = std::stoi(args[current_index++]);
+		uint current_arg;
+		if (waiting_string.empty())
+			current_arg = std::stoi(args[current_index++]);
+		else
+			current_arg = std::stoi(waiting_string);
+		waiting_string.clear();
 		return current_arg;
 	}
 }
@@ -68,7 +73,12 @@ std::string ArgsManager::get_string()
 		          << ":" << get_previous_arg() << "\n";
 		exit(EXIT_SUCCESS);
 	} else {
-		std::string current_arg = args[current_index++];
+		std::string current_arg;
+		if (waiting_string.empty())
+			current_arg = args[current_index++];
+		else
+			current_arg = waiting_string;
+		waiting_string.clear();
 		return current_arg;
 	}
 }
@@ -76,6 +86,11 @@ std::string ArgsManager::get_string()
 EM::Arg ArgsManager::get_arg()
 {
 	std::string current_arg = get_string();
+
+	if (current_arg.size() > 2 && current_arg[0] == '-') {
+		waiting_string = current_arg.substr(2, current_arg.size() - 2);
+		current_arg = current_arg.substr(0, 2);
+	}
 
 	EM::Arg arg = EM::Args::from_string(current_arg);
 

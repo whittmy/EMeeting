@@ -49,6 +49,7 @@ private:
 
 	size_t current_index;
 	std::string previous_arg;
+	std::string waiting_string;
 };
 
 #endif // ARGSMANAGER_H

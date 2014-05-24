@@ -4,7 +4,6 @@ set (EMSystem_SRCS
 	Error.cpp
 	Mixer.cpp
 	SignalHandler.cpp
-	TcpConnection.cpp
 )
 
 add_library (EMSystem ${EMSystem_SRCS})

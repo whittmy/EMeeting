@@ -17,9 +17,9 @@ void quit()
 
 int main(int argc, char **argv)
 {
-	EMClient em_client(std::cin, std::cout);
 	ArgsManager args_manager(argc - 1, argv + 1);
 
+	EMClient em_client(std::cin, std::cout);
 	em_client_ptr = &em_client;
 
 	SignalHandler::setup((int) SIGINT, quit);

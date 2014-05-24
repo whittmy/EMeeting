@@ -1,6 +1,7 @@
 #ifndef EMCLIENT_H
 #define EMCLIENT_H
 
+#include <boost/asio.hpp>
 #include <string>
 #include <iostream>
 
@@ -21,13 +22,20 @@ public:
 	void quit();
 
 private:
+	void connect_udp();
+
 	std::istream &in;
 	std::ostream &out;
 
 	uint port;
 	std::string server_name;
 
+	uint cid;
+
 	uint retransmit_limit;
+
+	boost::asio::io_service io_service;
+	boost::asio::ip::tcp::resolver tcp_resolver;
 };
 
 #endif // EMCLIENT_H

@@ -1,5 +1,17 @@
 #include "System/AbstractServer.h"
 
+/**
+ * \class Connection
+ */
+
+Connection::~Connection()
+{}
+
+
+/**
+ * \class AbstractServer
+ */
+
 AbstractServer::AbstractServer() :
 	current_cid(DEFAULT_FIRST_CID)
 {}
