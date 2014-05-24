@@ -38,8 +38,8 @@ namespace EM {
 	static inline std::string without_endline(const std::string &str)
 	{
 		std::string s(str);
-		int i = s.size() - 1;
-		while (i >= 0 && s[i] == '\n')
+		int i = s.size();
+		while (i > 0 && s[i - 1] == '\n')
 			--i;
 		return s.substr(0, i);
 	}

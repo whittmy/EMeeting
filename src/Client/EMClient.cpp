@@ -96,7 +96,8 @@ void EMClient::start()
 
 			std::cerr << "received message: " << received_message;
 
-			received_message = EM::without_endline(received_message.substr(7));
+			received_message =
+				EM::trimmed(EM::without_endline(received_message.substr(6)));
 
 			try {
 				cid = boost::lexical_cast<uint>(received_message);

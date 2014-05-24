@@ -96,17 +96,25 @@ void EMServer::start()
 	std::cerr << "accepting connections on port " << port << " (IPv4)\n";
 	start_accept();
 
-	std::shared_ptr<std::thread> info_thread =
-		std::shared_ptr<std::thread>(new std::thread());
+	std::thread (&EMServer::send_info_routine, this).detach();
 
 	io_service.run();
 }
 
 void EMServer::quit()
 {
-	std::cerr << "clearing server resources...\n";
+	std::cerr << "\nclearing server resources...\n";
+
+	clients[2] = new ClientObject(2, 5, 5, 5);
+
+	std::cerr << "inserted into clients\n";
+
+	std::cerr << "and here it is: " << clients[5]->get_cid() << "\n";
+
+	std::cerr << "deleting\n";
+
 	for (auto obj : clients) {
-		std::cerr << "deleting " << obj.first << "\n";
+		std::cerr << "deleting " << obj.second << "\n";
 		delete obj.second;
 	}
 	std::cerr << "done\n";
@@ -174,12 +182,24 @@ void EMServer::handle_accept(
 void EMServer::send_info_routine()
 {
 	while (true) {
-		std::cerr << "sending info\n";
 		sleep(SEND_INFO_FREQUENCY);
-		std::string report("\n");
-		for (auto p : clients)
-			report += p.second->get_report();
-		for (auto p : clients)
-			p.second->get_connection()->send_info(report);
+		if (get_active_clients_number() > 0) {
+			std::cerr << "sending info\n";
+			std::string report("\n");
+			for (auto p : clients)
+				if (p.second->is_connected())
+					report += p.second->get_report();
+			for (auto p : clients)
+				if (p.second->is_connected())
+					p.second->get_connection()->send_info(report);
+		}
 	}
+}
+
+uint EMServer::get_active_clients_number() const
+{
+	uint cnt = 0;
+	for (auto p : clients)
+		cnt += (int) (p.second->is_connected());
+	return cnt;
 }

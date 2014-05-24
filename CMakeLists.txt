@@ -1,6 +1,6 @@
 project (EMeeting)
 cmake_minimum_required (VERSION 2.8)
-set (CMAKE_CXX_FLAGS "-Wall -std=c++11 -O2 -lboost_system -lpthread")
+set (CMAKE_CXX_FLAGS "-Wall -std=c++11 -ggdb -lboost_system -lpthread")
 
 find_package(Boost 1.53.0 REQUIRED COMPONENTS thread system)
 

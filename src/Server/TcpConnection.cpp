@@ -25,19 +25,17 @@ void TcpConnection::start()
 	std::cerr << "sending message: " << message;
 
 	boost::asio::async_write(socket, boost::asio::buffer(message),
-		boost::bind(&TcpConnection::handle_write, shared_from_this(),
-		boost::asio::placeholders::error,
-		boost::asio::placeholders::bytes_transferred));
+		boost::bind(&TcpConnection::handle_connect, shared_from_this(),
+			boost::asio::placeholders::error,
+			boost::asio::placeholders::bytes_transferred));
 }
 
 void TcpConnection::send_info(const std::string &info)
 {
-	std::cerr << "sending info...\n";
-
 	boost::asio::async_write(socket, boost::asio::buffer(info),
 		boost::bind(&TcpConnection::handle_write, shared_from_this(),
-		boost::asio::placeholders::error,
-		boost::asio::placeholders::bytes_transferred));
+			boost::asio::placeholders::error,
+			boost::asio::placeholders::bytes_transferred));
 }
 
 boost::asio::ip::tcp::socket &TcpConnection::get_socket()

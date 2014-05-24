@@ -46,6 +46,7 @@ private:
 	void handle_accept(TcpConnection::Pointer new_connection,
 	                   const boost::system::error_code &error);
 	void send_info_routine();
+	uint get_active_clients_number() const;
 
 	uint port;
 
