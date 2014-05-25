@@ -3,6 +3,7 @@
 
 #include <queue>
 #include <boost/asio.hpp>
+#include <mutex>
 #include <sys/types.h>
 #include <unordered_map>
 
@@ -58,7 +59,7 @@ private:
 
 	uint tx_interval;
 
-	//TODO make it thread safe
+	mutable std::mutex clients_mutex;
 	std::unordered_map<uint, ClientObject *> clients;
 
 	boost::asio::io_service io_service;

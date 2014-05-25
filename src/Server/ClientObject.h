@@ -58,8 +58,8 @@ public:
 
 	std::string get_name() const;
 
-	void set_connection(TcpConnection *connection);
-	TcpConnection *get_connection();
+	void set_connection(TcpConnection::Pointer connection);
+	TcpConnection::Pointer get_connection();
 	bool is_connected() const;
 
 	std::string get_report() const;
@@ -68,7 +68,7 @@ private:
 	uint cid;
 	ClientQueue queue;
 
-	TcpConnection *connection;
+	TcpConnection::Pointer connection;
 };
 
 #endif // CLIENTOBJECT_H

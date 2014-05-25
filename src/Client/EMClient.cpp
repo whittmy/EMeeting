@@ -51,7 +51,7 @@ void EMClient::start()
 {
 	io_service.run();
 
-	std::cerr << "connecting with " << get_server_name() << " on port " << get_port() << "\n";
+	std::cerr << "Connecting with " << get_server_name() << " on port " << get_port() << "\n";
 
 	/** If this throws an exception, your computer just exploded */
 	boost::asio::ip::tcp::resolver::query query(
@@ -64,7 +64,7 @@ void EMClient::start()
 
 	while (true) {
 		repeat_twice {
-			std::cerr << "establishing connection...\n";
+			std::cerr << "Establishing connection... ";
 
 			boost::asio::ip::tcp::resolver::iterator endpoint_iterator =
 				tcp_resolver.resolve(query);
@@ -73,15 +73,15 @@ void EMClient::start()
 			boost::asio::connect(socket, endpoint_iterator, error);
 
 			if (!error) {
-				std::cerr << "connection established\n";
+				std::cerr << "connected!\n";
 			} else {
-				std::cerr << "unable to connect\n";
+				std::cerr << "unable to connect.\n";
 				continue;
 			}
 
 			bool connected = true;
 
-			std::cerr << "reading network initialization message...\n";
+			std::cerr << "Reading network initialization message... ";
 
 			size_t length = socket.read_some(boost::asio::buffer(buf), error);
 			std::memset(buf.c_array() + length, (int) '\0', BUFFER_SIZE - length);
@@ -94,7 +94,7 @@ void EMClient::start()
 			connected &= length > 6 && received_message.substr(0, 6) ==
 			             EM::Messages::Client.substr(0, 6);
 
-			std::cerr << "received message: " << received_message;
+			std::cerr << "received message: " << received_message << "\n";
 
 			received_message =
 				EM::trimmed(EM::without_endline(received_message.substr(6)));
@@ -102,7 +102,7 @@ void EMClient::start()
 			try {
 				cid = boost::lexical_cast<uint>(received_message);
 			} catch (boost::bad_lexical_cast) {
-				std::cerr << "received invalid client id: \""
+				std::cerr << "Received invalid client id: \""
 				          << received_message << "\"\n";
 				connected = false;
 			}
@@ -110,26 +110,29 @@ void EMClient::start()
 			if (connected)
 				connect_udp();
 
+			static const uint MAX_DELAY = 3;
+			uint delay = 0;
+
 			while (connected) {
 				socket.read_some(boost::asio::buffer(buf), error);
 
 				if (error) {
 					/** When error is something other than nothing to read */
-					if (error.value() != 2) {
+					if (error.value() != boost::asio::error::eof ||
+					    delay > MAX_DELAY)
 						connected = false;
-						std::cerr << error.message()
-						          << " (" << error.value()
-						          << ")\n";
-					}
+					else
+						++delay;
 				} else {
+					delay = 0;
 					received_message = std::string(buf.begin(), buf.end());
 					out << received_message;
 				}
 				sleep(AbstractServer::SEND_INFO_FREQUENCY);
 			}
-			std::cerr << "disconnected!\n";
+			std::cerr << "Disconnected!\n";
 		}
-		sleep(10);
+		sleep(5);
 	}
 }
 

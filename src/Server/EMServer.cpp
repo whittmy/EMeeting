@@ -93,7 +93,7 @@ void EMServer::start()
 {
 	tcp_acceptor = new boost::asio::ip::tcp::acceptor(
 		io_service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port));
-	std::cerr << "accepting connections on port " << port << " (IPv4)\n";
+	std::cerr << "Accepting connections on port " << port << " (IPv4).\n";
 	start_accept();
 
 	std::thread (&EMServer::send_info_routine, this).detach();
@@ -103,21 +103,14 @@ void EMServer::start()
 
 void EMServer::quit()
 {
-	std::cerr << "\nclearing server resources...\n";
+	std::cerr << "\nClearing server resources...\n";
 
-	clients[2] = new ClientObject(2, 5, 5, 5);
-
-	std::cerr << "inserted into clients\n";
-
-	std::cerr << "and here it is: " << clients[5]->get_cid() << "\n";
-
-	std::cerr << "deleting\n";
-
-	for (auto obj : clients) {
-		std::cerr << "deleting " << obj.second << "\n";
+	clients_mutex.lock();
+	for (auto obj : clients)
 		delete obj.second;
-	}
-	std::cerr << "done\n";
+	clients.clear();
+	clients_mutex.unlock();
+	std::cerr << "done.\n";
 }
 
 uint EMServer::get_next_cid()
@@ -126,42 +119,49 @@ uint EMServer::get_next_cid()
 		uint cid = AbstractServer::get_next_cid();
 		bool used = false;
 
+		clients_mutex.lock();
 		for (auto c : clients)
 			if (c.second->get_cid() == cid)
 				used = true;
+		clients_mutex.unlock();
 		if (!used)
 			return cid;
 	}
-	std::cerr << "get next cid: error\n";
+	std::cerr << "get_next_cid: error\n";
 	exit(EXIT_SUCCESS);
 }
 
 void EMServer::add_client(uint cid)
 {
+	clients_mutex.lock();
 	clients[cid] =
 		new ClientObject(cid,
 		                 get_fifo_size(),
 		                 get_fifo_low_watermark(),
 		                 get_fifo_high_watermark());
-	std::cerr << "added client: " << cid << "\n";
+	clients_mutex.unlock();
+	std::cerr << "Added client: " << cid << "\n";
 }
 
 void EMServer::on_connection_established(uint cid, Connection *connection)
 {
 	add_client(cid);
-	clients[cid]->set_connection(dynamic_cast<TcpConnection *>(connection));
+	clients_mutex.lock();
+	clients[cid]->set_connection(
+		dynamic_cast<TcpConnection *>(connection)->shared_from_this());
+	clients_mutex.unlock();
 }
 
 void EMServer::on_connection_lost(uint cid)
 {
-	clients[cid]->set_connection(nullptr);
+	clients[cid]->set_connection(TcpConnection::Pointer(nullptr));
 }
 
 void EMServer::start_accept()
 {
 	TcpConnection::Pointer new_connection =
 		TcpConnection::create(this, tcp_acceptor->get_io_service());
-	std::cerr << "waiting for connections...\n";
+	std::cerr << "Waiting for connections...\n";
 	tcp_acceptor->async_accept(
 		new_connection->get_socket(),
 		boost::bind(&EMServer::handle_accept, this, new_connection,
@@ -186,12 +186,15 @@ void EMServer::send_info_routine()
 		if (get_active_clients_number() > 0) {
 			std::cerr << "sending info\n";
 			std::string report("\n");
+
+			clients_mutex.lock();
 			for (auto p : clients)
 				if (p.second->is_connected())
 					report += p.second->get_report();
 			for (auto p : clients)
 				if (p.second->is_connected())
 					p.second->get_connection()->send_info(report);
+			clients_mutex.unlock();
 		}
 	}
 }
@@ -199,7 +202,9 @@ void EMServer::send_info_routine()
 uint EMServer::get_active_clients_number() const
 {
 	uint cnt = 0;
+	clients_mutex.lock();
 	for (auto p : clients)
 		cnt += (int) (p.second->is_connected());
+	clients_mutex.unlock();
 	return cnt;
 }

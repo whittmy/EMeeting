@@ -5,6 +5,11 @@
 #include "Server/TcpConnection.h"
 #include "System/Messages.h"
 
+TcpConnection::~TcpConnection()
+{
+	server->on_connection_lost(cid);
+}
+
 TcpConnection::Pointer TcpConnection::create(
 	AbstractServer *server,
 	boost::asio::io_service &io_service)
@@ -14,7 +19,7 @@ TcpConnection::Pointer TcpConnection::create(
 
 void TcpConnection::start()
 {
-	std::cerr << "starting connection...\n";
+	std::cerr << "Starting connection...\n";
 	char msg[128];
 
 	cid = server->get_next_cid();
@@ -22,7 +27,7 @@ void TcpConnection::start()
 
 	std::string message(msg, std::strlen(msg));
 
-	std::cerr << "sending message: " << message;
+	std::cerr << "Sending message: " << message;
 
 	boost::asio::async_write(socket, boost::asio::buffer(message),
 		boost::bind(&TcpConnection::handle_connect, shared_from_this(),

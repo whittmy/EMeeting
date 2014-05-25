@@ -112,9 +112,7 @@ ClientObject::ClientObject(
 	size_t fifo_high_watermark) :
 
 	cid(cid),
-	queue(fifo_size, fifo_low_watermark, fifo_high_watermark),
-
-	connection(nullptr)
+	queue(fifo_size, fifo_low_watermark, fifo_high_watermark)
 {}
 
 uint ClientObject::get_cid() const
@@ -129,15 +127,18 @@ ClientQueue &ClientObject::get_queue()
 
 std::string ClientObject::get_name() const
 {
-	return connection->get_name();
+	if (connection == nullptr)
+		return std::string("unknown");
+	else
+		return connection->get_name();
 }
 
-void ClientObject::set_connection(TcpConnection *connection)
+void ClientObject::set_connection(TcpConnection::Pointer connection)
 {
 	this->connection = connection;
 }
 
-TcpConnection *ClientObject::get_connection()
+TcpConnection::Pointer ClientObject::get_connection()
 {
 	return connection;
 }
