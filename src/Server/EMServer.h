@@ -49,6 +49,12 @@ private:
 	void send_info_routine();
 	uint get_active_clients_number() const;
 
+	uint get_cid_from_address(const std::string &address);
+
+	void udp_receive_routine();
+	void handle_receive(const boost::system::error_code &ec, size_t bytes_received);
+	void send_ack(uint nr);
+
 	uint port;
 
 	uint fifo_size;
@@ -64,6 +70,13 @@ private:
 
 	boost::asio::io_service io_service;
 	boost::asio::ip::tcp::acceptor *tcp_acceptor;
+
+	boost::asio::ip::udp::socket udp_socket;
+	boost::asio::ip::udp::endpoint udp_endpoint;
+
+	static const size_t BUFFER_SIZE = 65536;
+
+	char buffer[BUFFER_SIZE];
 };
 
 #endif // EMSERVER_H

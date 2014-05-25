@@ -17,11 +17,20 @@ ClientQueue::ClientQueue(
 	fifo_high_watermark(fifo_high_watermark),
 
 	current_size(0),
-	bytes_inserted(0)
+	bytes_inserted(0),
+
+	recent_min(0),
+	recent_max(0),
+
+	nr(0)
 {}
 
-void ClientQueue::push(EM::MixerInput input)
+void ClientQueue::push(ClientQueue::Data input, uint nr)
 {
+	if (get_size() + std::strlen(input.data) > get_max_size() || nr <= this->nr) {
+		std::cerr << "Package dropped!\n";
+		return;
+	}
 	queue.push(input);
 
 	if (get_size() > fifo_high_watermark)
@@ -29,15 +38,15 @@ void ClientQueue::push(EM::MixerInput input)
 
 	update_recent_data();
 
-	size_t bytes = sizeof(input);
+	bytes_inserted += input.length;
+	current_size   += input.length;
 
-	bytes_inserted += bytes;
-	current_size   += bytes;
+	this->nr = nr;
 }
 
-EM::MixerInput ClientQueue::pop()
+ClientQueue::Data ClientQueue::pop()
 {
-	EM::MixerInput input = front();
+	Data input = front();
 	queue.pop();
 
 	if (get_size() < fifo_low_watermark)
@@ -45,12 +54,12 @@ EM::MixerInput ClientQueue::pop()
 
 	update_recent_data();
 
-	current_size -= sizeof(input);
+	current_size -= input.length;
 
 	return input;
 }
 
-EM::MixerInput ClientQueue::front()
+ClientQueue::Data ClientQueue::front()
 {
 	return queue.front();
 }
@@ -58,6 +67,18 @@ EM::MixerInput ClientQueue::front()
 bool ClientQueue::is_full() const
 {
 	return get_size() == fifo_size;
+}
+
+void ClientQueue::clear()
+{
+	current_size   = 0;
+	bytes_inserted = 0;
+	recent_min     = 0;
+	recent_max     = 0;
+	while (!queue.empty()) {
+		ClientQueue::Data d = pop();
+		delete d.data;
+	}
 }
 
 size_t ClientQueue::get_size() const
@@ -88,6 +109,11 @@ size_t ClientQueue::get_max_recent_bytes() const
 void ClientQueue::reset_recent_data()
 {
 	recent_min = recent_max = get_size();
+}
+
+uint ClientQueue::get_expected_nr() const
+{
+	return nr + 1;
 }
 
 ClientQueue::State ClientQueue::get_current_state() const

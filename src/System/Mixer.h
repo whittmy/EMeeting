@@ -15,9 +15,12 @@ namespace EM {
 
 	const int DATA_MS_SIZE = 176;
 
-	void mixer(MixerInput *inputs, size_t queues_number,
-	           void *output_buffer, size_t *output_size,
-	           unsigned long tx_interval_ms);
+	void mixer(
+		MixerInput *inputs,
+		size_t queues_number,
+		void *output_buffer,
+		size_t *output_size,
+		unsigned long tx_interval_ms);
 }
 
 #endif // MIXER_H

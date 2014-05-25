@@ -20,7 +20,7 @@ TcpConnection::Pointer TcpConnection::create(
 void TcpConnection::start()
 {
 	std::cerr << "Starting connection...\n";
-	char msg[128];
+	char msg[EM::Messages::LENGTH];
 
 	cid = server->get_next_cid();
 	std::sprintf(msg, EM::Messages::Client.c_str(), cid);
@@ -59,6 +59,8 @@ std::string TcpConnection::get_name() const
 	try {
 		name = boost::lexical_cast<std::string>(socket.remote_endpoint());
 	} catch (boost::bad_lexical_cast) {
+		return std::string("exploded");
+	} catch (boost::system::system_error) {
 		return std::string("unknown");
 	}
 	return name;
@@ -78,8 +80,6 @@ void TcpConnection::handle_connect(const boost::system::error_code &error, size_
 
 void TcpConnection::handle_write(const boost::system::error_code &error, size_t size)
 {
-	if (error) {
-		std::cerr << "handle_write: error\n";
+	if (error)
 		server->on_connection_lost(cid);
-	}
 }

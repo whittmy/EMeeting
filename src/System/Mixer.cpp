@@ -1,8 +1,11 @@
 #include "Mixer.h"
 
-void EM::mixer(EM::MixerInput *inputs, size_t queues_number,
-               void *output_buffer, size_t *output_size,
-               long unsigned int tx_interval_ms)
+void EM::mixer(
+	EM::MixerInput *inputs,
+	size_t queues_number,
+	void *output_buffer,
+	size_t *output_size,
+	long unsigned int tx_interval_ms)
 {
 	default_data_t *data_ptr;
 	size_t data_len;
@@ -14,8 +17,8 @@ void EM::mixer(EM::MixerInput *inputs, size_t queues_number,
 		data_ptr = reinterpret_cast<default_data_t *>(inputs[i].data);
 		data_len  = 0;
 		while (data_len < tx_interval_ms * DATA_MS_SIZE &&
-		       inputs[i].length - data_len * sizeof(default_data_t)
-		       > sizeof(default_data_t))
+			inputs[i].length - data_len * sizeof(default_data_t)
+			> sizeof(default_data_t))
 			output_buf[output_data_size++] = data_ptr[data_len++];
 		inputs[i].consumed += data_len * sizeof(default_data_t);
 
