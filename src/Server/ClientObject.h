@@ -31,6 +31,7 @@ public:
 
 	size_t get_size() const;
 	size_t get_max_size() const;
+	size_t get_available_space_size() const;
 	size_t get_bytes_inserted() const;
 
 	size_t get_min_recent_bytes() const;

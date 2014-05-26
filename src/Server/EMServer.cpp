@@ -108,14 +108,13 @@ void EMServer::start()
 
 void EMServer::quit()
 {
-	std::cerr << "\nClearing server resources...\n";
+	std::cerr << "\nClearing server resources.\n";
 
-	clients_mutex.lock();
+	/*clients_mutex.lock();
 	for (auto obj : clients)
 		delete obj.second;
 	clients.clear();
-	clients_mutex.unlock();
-	std::cerr << "done.\n";
+	clients_mutex.unlock();*/
 }
 
 uint EMServer::get_next_cid()
@@ -189,10 +188,13 @@ void EMServer::handle_accept(
 
 void EMServer::send_info_routine()
 {
+	boost::asio::deadline_timer timer(
+		io_service, boost::posix_time::milliseconds(SEND_INFO_TIMEOUT_MS));
 	while (true) {
-		sleep(SEND_INFO_FREQUENCY);
+		timer.expires_from_now(boost::posix_time::milliseconds(SEND_INFO_TIMEOUT_MS));
+		timer.wait();
 		if (get_active_clients_number() > 0) {
-			std::cerr << "Sending info\n";
+			std::cerr << "SEND INFO\n";
 			std::string report("\n");
 
 			clients_mutex.lock();
@@ -244,10 +246,9 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 			case EM::Messages::Type::Client: {
 				uint cid = 0;
 				if (std::sscanf(buffer, EM::Messages::Client.c_str(), &cid) == 1)
-					std::cerr << "Received cid '" << cid
-						<< "' confirmation.\n";
+					std::cerr << "READ " << buffer;
 				else
-					std::cerr << "Received invalid CLIENT datagram.\n";
+					std::cerr << "READ invalid CLIENT datagram.\n";
 				break;
 			}
 			case EM::Messages::Type::Upload: {
@@ -259,36 +260,44 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 						udp_endpoint.address().to_string());
 					for (index = 0; index < std::strlen(buffer) &&
 						buffer[index] != '\n'; ++index) {}
+					++index;
+
+					std::cerr << "READ UPLOAD " << nr << " from " << cid
+						<< " (" << bytes_received << ")\n";
 
 					ClientQueue::Data data;
-					std::memcpy(data.data, buffer + index + 1,
+					data.data = new char[bytes_received - index - 1];
+					std::memcpy(data.data, buffer + index,
 						bytes_received - index - 1);
 
-					clients[cid]->get_queue().push(data, nr);
-					send_ack(nr);
+					ClientQueue &queue = clients[cid]->get_queue();
+					queue.push(data, nr);
+					send_ack(nr, queue.get_available_space_size());
 				} else {
-					std::cerr << "Received invalid UPLOAD datagram.\n";
+					std::cerr << "READ invalid UPLOAD datagram.\n";
 				}
 				break;
 			}
 			case EM::Messages::Type::Retransmit: {
-				std::cerr << "Retransmit came.\n";
+				std::cerr << "READ " << buffer;
 				break;
 			}
 			case EM::Messages::Type::KeepAlive: {
 				break;
 			}
 			default:
-				std::cerr << "Unrecognized datagram: " << buffer;
+				std::cerr << "READ Unrecognized datagram: " << buffer;
 		}
 	}
 	udp_receive_routine();
 }
 
-void EMServer::send_ack(uint nr)
+void EMServer::send_ack(uint nr, size_t win)
 {
 	char message[EM::Messages::LENGTH];
-	std::sprintf(message, EM::Messages::Ack.c_str(), nr);
+	std::sprintf(message, EM::Messages::Ack.c_str(), nr + 1, win);
+
+	std::cerr << "SEND " << message;
 
 	udp_socket.async_send_to(
 		boost::asio::buffer(message, std::strlen(message)), udp_endpoint,

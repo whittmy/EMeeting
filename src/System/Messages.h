@@ -2,20 +2,29 @@
 #define MESSAGES_H
 
 #include <cctype>
-#include <cstdarg>
-#include <cstring>
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <unordered_map>
 
 namespace EM {
 	namespace Messages {
-		const std::string Client     = "CLIENT %u\n";
+		namespace Headers {
+			const std::string Client     = "CLIENT";
+			const std::string Upload     = "UPLOAD";
+			const std::string Data       = "DATA";
+			const std::string Ack        = "ACK";
+			const std::string Retransmit = "RETRANSMIT";
+			const std::string KeepAlive  = "KEEPALIVE";
+		}
+
+		const std::string Client     = Headers::Client + " %u\n";
 		const std::string List       = "%s FIFO: %u/%u (min. %u, max. %u)\n";
-		const std::string Upload     = "UPLOAD %u\n";
-		const std::string Data       = "DATA %u %u %u\n";
-		const std::string Ack        = "ACK %u %u\n";
-		const std::string Retransmit = "RETRANSMIT %u\n";
-		const std::string KeepAlive  = "KEEPALIVE\n";
+		const std::string Upload     = Headers::Upload + " %u\n";
+		const std::string Data       = Headers::Data + " %u %u %u\n";
+		const std::string Ack        = Headers::Ack + " %u %u\n";
+		const std::string Retransmit = Headers::Retransmit + " %u\n";
+		const std::string KeepAlive  = Headers::KeepAlive + "\n";
 
 		enum class Type : uint8_t {
 			Client,
@@ -28,42 +37,76 @@ namespace EM {
 			Unknown,
 		};
 
+		const std::unordered_map<std::string, Type> header_to_type {
+			{Headers::Client,     Type::Client},
+			{Headers::Upload,     Type::Upload},
+			{Headers::Data,       Type::Data},
+			{Headers::Ack,        Type::Ack},
+			{Headers::Retransmit, Type::Retransmit},
+			{Headers::KeepAlive,  Type::KeepAlive},
+		};
+
 		const size_t LENGTH = 128;
 
 		static Type get_type(const std::string &str);
-		static Type get_type(const char *str);
+		static Type get_type(const char *str, size_t length);
 
+		static bool read_data(
+			const char *buffer,
+			size_t length,
+			uint &nr,
+			uint &ack,
+			size_t &win);
+
+		static bool read_ack(const char *buffer, size_t length, uint &ack, size_t &win);
 	}
 }
 
 EM::Messages::Type EM::Messages::get_type(const std::string &str)
 {
 	std::string s;
-	uint arg1 = 0, arg2 = 0, arg3 = 0, arg4 = 0;
+	std::stringstream ss(str);
 
-	if (std::sscanf(str.c_str(), EM::Messages::Client.c_str(), &arg1) == 1)
-		return EM::Messages::Type::Client;
-	else if (std::sscanf(
-		str.c_str(), EM::Messages::List.c_str(), &s[0], &arg1, &arg2, &arg3, &arg4)
-			== 5)
-		return EM::Messages::Type::List;
-	else if (std::sscanf(str.c_str(), EM::Messages::Upload.c_str(), &arg1) == 1)
-		return EM::Messages::Type::Upload;
-	else if (std::sscanf(str.c_str(), EM::Messages::Data.c_str(), &arg1, &arg2, &arg3) == 3)
-		return EM::Messages::Type::Data;
-	else if (std::sscanf(str.c_str(), EM::Messages::Ack.c_str(), &arg1, &arg2) == 2)
-		return EM::Messages::Type::Ack;
-	else if (std::sscanf(str.c_str(), EM::Messages::Retransmit.c_str(), &arg1) == 1)
-		return EM::Messages::Type::Retransmit;
-	else if (std::strcmp(str.c_str(), EM::Messages::KeepAlive.c_str()) == 0)
-		return EM::Messages::Type::KeepAlive;
+	ss >> s;
+	if (header_to_type.find(s) != header_to_type.end())
+		return header_to_type.at(s);
 	else
-		return EM::Messages::Type::Unknown;
+		return Type::Unknown;
 }
 
-EM::Messages::Type EM::Messages::get_type(const char *str)
+EM::Messages::Type EM::Messages::get_type(const char *str, size_t length)
 {
-	return get_type(std::string(str, EM::Messages::LENGTH));
+	return get_type(std::string(str, length));
+}
+
+bool EM::Messages::read_data(const char *buffer, size_t length, uint &nr, uint &ack, size_t &win)
+{
+	std::string s;
+	std::stringstream ss(std::string(buffer, length));
+
+	ss >> s;
+	if (s != Headers::Data)
+		return false;
+
+	ss >> nr >> ack >> win;
+
+	return !ss.bad();
+}
+
+bool EM::Messages::read_ack(const char *buffer, size_t length, uint &ack, size_t &win)
+{
+	std::string s;
+	std::stringstream ss(std::string(buffer, length));
+
+	ss >> s;
+	if (s != Headers::Ack)
+		return false;
+
+	ss >> ack >> win;
+
+	std::cerr << "read " << ack << " and " << win << "\n";
+
+	return !ss.bad();
 }
 
 #endif // MESSAGES_H

@@ -23,7 +23,7 @@ public:
 	virtual void on_connection_established(uint cid, Connection *connection) = 0;
 	virtual void on_connection_lost(uint cid) = 0;
 
-	static const uint SEND_INFO_FREQUENCY = 1;
+	static const uint SEND_INFO_TIMEOUT_MS = 1000;
 
 private:
 	static const int DEFAULT_FIRST_CID = 1;

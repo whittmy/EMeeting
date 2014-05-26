@@ -1,4 +1,5 @@
 #include <cstring>
+#include <iostream>
 
 #include "Client/DataBuffer.h"
 
@@ -31,7 +32,10 @@ void DataBuffer::insert(char *ptr, size_t length)
 		end = current;
 		current = 0;
 	}
-	std::memcpy(data, ptr, length);
+	std::memcpy(data + current, ptr, length);
+	std::cerr << "inserted: " << std::string(data + current, length) << "\n";
+
+	current += length;
 }
 
 std::pair<char *, size_t> DataBuffer::get_data(uint number, size_t length)
@@ -42,11 +46,21 @@ std::pair<char *, size_t> DataBuffer::get_data(uint number, size_t length)
 
 	if (end - indexes[index] < length) {
 		indexes[index++] = 0;
-		return std::pair<char *, size_t>(data + indexes[index - 1],
-			end - indexes[index - 1]);
+		if (current > indexes[index - 1]) {
+			end = current;
+			current = 0;
+			return std::pair<char *, size_t>(data + indexes[index - 1],
+				current - indexes[index - 1]);
+		} else {
+			return std::pair<char *, size_t>(data + indexes[index - 1],
+				end - indexes[index - 1]);
+		}
 	} else {
-		indexes[index + 1] = indexes[index] + length;
-		return std::pair<char *, size_t>(data + indexes[index++], length);
+		size_t l = std::min(length, current - indexes[index]);
+		indexes[index + 1] = indexes[index] + l;
+
+		std::cerr << "get_data: " << std::string(data + indexes[index], l) << "\n";
+		return std::pair<char *, size_t>(data + indexes[index++], l);
 	}
 }
 

@@ -27,11 +27,13 @@ ClientQueue::ClientQueue(
 
 void ClientQueue::push(ClientQueue::Data input, uint nr)
 {
-	if (get_size() + std::strlen(input.data) > get_max_size() || nr <= this->nr) {
+	if (get_size() + input.length > get_max_size() || nr <= this->nr) {
 		std::cerr << "Package dropped!\n";
 		return;
 	}
 	queue.push(input);
+
+	std::cerr << "input from client: " << input.data << " (" << input.length << ")\n";
 
 	if (get_size() > fifo_high_watermark)
 		state = State::Active;
@@ -89,6 +91,11 @@ size_t ClientQueue::get_size() const
 size_t ClientQueue::get_max_size() const
 {
 	return fifo_size;
+}
+
+size_t ClientQueue::get_available_space_size() const
+{
+	return get_max_size() - get_size();
 }
 
 size_t ClientQueue::get_bytes_inserted() const

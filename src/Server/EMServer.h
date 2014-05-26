@@ -53,7 +53,7 @@ private:
 
 	void udp_receive_routine();
 	void handle_receive(const boost::system::error_code &ec, size_t bytes_received);
-	void send_ack(uint nr);
+	void send_ack(uint nr, size_t win);
 
 	uint port;
 

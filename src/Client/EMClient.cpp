@@ -25,7 +25,13 @@ EMClient::EMClient(std::istream &in, std::ostream &out) :
 	tcp_resolver(io_service),
 
 	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 0)),
-	udp_resolver(io_service)
+	udp_resolver(io_service),
+
+	datagram_client_server_number(1),
+	datagram_client_sent_number(0),
+	datagram_client_input_number(0),
+
+	datagram_server_client_number(0)
 {}
 
 EMClient::~EMClient()
@@ -74,6 +80,8 @@ void EMClient::start()
 
 	std::string received_message;
 
+	boost::asio::deadline_timer timer(io_service);
+
 	while (true) {
 		repeat_twice {
 			connected = connect_tcp();
@@ -102,9 +110,12 @@ void EMClient::start()
 					received_message =
 						std::string(buf.begin(),
 							buf.begin() + bytes_read);
-					out << received_message;
+// 					std::cerr << received_message;
 				}
-				sleep(AbstractServer::SEND_INFO_FREQUENCY);
+				timer.expires_from_now(
+					boost::posix_time::milliseconds(
+						AbstractServer::SEND_INFO_TIMEOUT_MS));
+				timer.wait();
 			}
 			std::cerr << "Disconnected!\n";
 		}
@@ -215,18 +226,22 @@ void EMClient::send_data_to_server()
 	while (in.getline(input, MSG_SIZE)) {
 		buffer.insert(input, std::strlen(input));
 		auto p = buffer.get_data(datagram_client_server_number, window_size);
+		++datagram_client_input_number;
 
 		do {
-			while (datagram_client_server_number < datagram_client_sent_number) {
+			do {
 				if (!send_datagram(p.first, p.second, datagram_client_server_number)) {
 					buffer.clear();
 					return;
+				} else {
+					++datagram_client_sent_number;
 				}
+
 				if (!wait_for_ack()) {
 					buffer.clear();
 					return;
 				}
-			}
+			} while (datagram_client_server_number <= datagram_client_sent_number);
 		} while (window_size < buffer.get_size());
 	}
 
@@ -237,28 +252,31 @@ void EMClient::read_data_from_server()
 {
 	char *buffer = new char[BUFFER_SIZE];
 
-	uint ack = 0, win = 0, nr = 0;
+	uint ack = 0, nr = 0;
+	size_t win = 0;
 	size_t index;
+	size_t length;
 	boost::system::error_code error;
 
 	while (true) {
-		udp_socket.receive_from(boost::asio::buffer(buffer, BUFFER_SIZE),
+		length =
+			udp_socket.receive_from(boost::asio::buffer(buffer, BUFFER_SIZE),
 			udp_endpoint, boost::asio::ip::udp::socket::message_flags(0), error);
 
-		std::cerr << "Read " << buffer << "\n";
+		std::cerr << "READ " << buffer << "\n";
 
 		if (error) {
 			delete[] buffer;
 			return;
 		}
 
-		EM::Messages::Type type = EM::Messages::get_type(buffer);
+		EM::Messages::Type type = EM::Messages::get_type(buffer, length);
 
 		data_mutex.lock();
 		switch (type) {
 			case EM::Messages::Type::Data:
-				if (std::sscanf(buffer, EM::Messages::Data.c_str(), nr, ack, win)
-					!= 3)
+				if (!EM::Messages::read_data(
+					buffer, EM::Messages::LENGTH, nr, ack, win))
 					break;
 				datagram_client_server_number = ack;
 				window_size = win;
@@ -274,11 +292,11 @@ void EMClient::read_data_from_server()
 				}
 				break;
 			case EM::Messages::Type::Ack:
-				if (std::sscanf(buffer, EM::Messages::Ack.c_str(), ack, win) != 2)
+				if (!EM::Messages::read_ack(buffer, length, ack, win))
 					break;
 				datagram_client_server_number = ack;
 				window_size = win;
-				datagram_client_cond.notify_one();
+				std::cerr << "datagram_client_server_number = " << ack << "\n";
 				break;
 			default:;
 		}
@@ -316,6 +334,8 @@ bool EMClient::ask_retransmit(uint number)
 
 	boost::system::error_code error;
 
+	std::cerr << "SEND " << message;
+
 	udp_socket.send_to(
 		boost::asio::buffer(message, std::strlen(message)), udp_endpoint,
 		boost::asio::ip::udp::socket::message_flags(0), error);
@@ -325,23 +345,28 @@ bool EMClient::ask_retransmit(uint number)
 
 bool EMClient::send_datagram(void *data, size_t length, uint number)
 {
-	char output[EM::Messages::LENGTH + MSG_SIZE];
+	boost::array<char, EM::Messages::LENGTH + MSG_SIZE> output;
 	boost::system::error_code error;
 
-	std::sprintf(output, EM::Messages::Upload.c_str(), cid);
-	size_t message_length = std::strlen(output);
+	std::sprintf(output.c_array() , EM::Messages::Upload.c_str(), number);
+	size_t message_length = std::strlen(output.c_array());
 
-	std::cerr << "Sending " << output;
+	std::cerr << "SEND " << output.c_array();
 
-	std::memcpy(output + message_length, data, length);
+	std::memcpy(output.c_array() + message_length, data, length);
 
-	udp_socket.send_to(
-		boost::asio::buffer(output, message_length + length),
-		udp_endpoint,
-		boost::asio::ip::udp::socket::message_flags(0), error);
+	std::cerr << "sending " << output.c_array() << "\n" << " (" << message_length << " + " << length << " bytes)\n";
 
-	if (error) {
-		std::cerr << "Unable to send data to server\n";
+	uint bytes_sent =
+		udp_socket.send_to(
+			boost::asio::buffer(output, message_length + length),
+			udp_endpoint,
+			boost::asio::ip::udp::socket::message_flags(0), error);
+
+	std::cerr << "bytes sent: " << bytes_sent << "\n";
+
+	if (error || bytes_sent < message_length + length) {
+		std::cerr << "Unable to send data to server.\n";
 		return false;
 	}
 
@@ -350,9 +375,11 @@ bool EMClient::send_datagram(void *data, size_t length, uint number)
 
 bool EMClient::wait_for_ack()
 {
-	while (datagram_client_server_number != datagram_client_sent_number) {
-		std::unique_lock<std::mutex> u(datagram_client_mutex);
-		datagram_client_cond.wait(u);
+	data_mutex.lock();
+	while (datagram_client_server_number <= datagram_client_sent_number) {
+		data_mutex.unlock();
+		data_mutex.lock();
 	}
-	return datagram_client_server_number == datagram_client_sent_number;
+	data_mutex.unlock();
+	return true;
 }
