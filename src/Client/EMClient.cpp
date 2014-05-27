@@ -224,13 +224,14 @@ void EMClient::send_data_to_server()
 	window_size = 64;
 
 	while (in.getline(input, MSG_SIZE)) {
-		buffer.insert(input, std::strlen(input));
-		auto p = buffer.get_data(datagram_client_server_number, window_size);
+		buffer.insert({input, std::strlen(input)});
+		EM::Data data = buffer.get_data(datagram_client_server_number, window_size);
 		++datagram_client_input_number;
 
 		do {
 			do {
-				if (!send_datagram(p.first, p.second, datagram_client_server_number)) {
+				if (!send_datagram(data.data, data.length,
+					datagram_client_server_number)) {
 					buffer.clear();
 					return;
 				} else {
@@ -263,7 +264,7 @@ void EMClient::read_data_from_server()
 			udp_socket.receive_from(boost::asio::buffer(buffer, BUFFER_SIZE),
 			udp_endpoint, boost::asio::ip::udp::socket::message_flags(0), error);
 
-		std::cerr << "READ " << buffer << "\n";
+		std::cerr << "READ " << buffer;
 
 		if (error) {
 			delete[] buffer;
@@ -296,7 +297,6 @@ void EMClient::read_data_from_server()
 					break;
 				datagram_client_server_number = ack;
 				window_size = win;
-				std::cerr << "datagram_client_server_number = " << ack << "\n";
 				break;
 			default:;
 		}
@@ -345,7 +345,7 @@ bool EMClient::ask_retransmit(uint number)
 
 bool EMClient::send_datagram(void *data, size_t length, uint number)
 {
-	boost::array<char, EM::Messages::LENGTH + MSG_SIZE> output;
+	boost::array<char, MSG_SIZE> output;
 	boost::system::error_code error;
 
 	std::sprintf(output.c_array() , EM::Messages::Upload.c_str(), number);
@@ -355,19 +355,11 @@ bool EMClient::send_datagram(void *data, size_t length, uint number)
 
 	std::memcpy(output.c_array() + message_length, data, length);
 
-	output[message_length] = 'x';
-	output[message_length + 1] = '\n';
-	output[message_length + 2] = '\0';
-
-	std::cerr << "sending " << output.c_array() << "\n" << " (" << message_length << " + " << length << " bytes)\n";
-
 	uint bytes_sent =
 		udp_socket.send_to(
 			boost::asio::buffer(output, message_length + length),
 			udp_endpoint,
 			boost::asio::ip::udp::socket::message_flags(0), error);
-
-	std::cerr << "bytes sent: " << bytes_sent << "\n";
 
 	if (error || bytes_sent < message_length + length) {
 		std::cerr << "Unable to send data to server.\n";

@@ -35,8 +35,6 @@ void ClientQueue::insert(EM::Data input, uint nr)
 	}
 	buffer.insert(input);
 
-	std::cerr << "input from client: " << input.data << " (" << input.length << ")\n";
-
 	if (get_size() > fifo_high_watermark)
 		state = State::Active;
 

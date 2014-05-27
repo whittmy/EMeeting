@@ -23,11 +23,10 @@ void TcpConnection::start()
 	char msg[EM::Messages::LENGTH];
 
 	cid = server->get_next_cid();
+
 	std::sprintf(msg, EM::Messages::Client.c_str(), cid);
 
 	std::string message(msg, std::strlen(msg));
-
-	std::cerr << "Sending message: " << message;
 
 	boost::asio::async_write(socket, boost::asio::buffer(message),
 		boost::bind(&TcpConnection::handle_connect, shared_from_this(),

@@ -42,7 +42,5 @@ bool EM::Messages::read_ack(const char *buffer, size_t length, uint &ack, size_t
 
 	ss >> ack >> win;
 
-	std::cerr << "read " << ack << " and " << win << "\n";
-
 	return !ss.bad();
 }

@@ -43,7 +43,6 @@ void DataBuffer::insert(EM::Data data)
 		current = 0;
 	}
 	std::memcpy(this->data + current, data.data, data.length);
-	std::cerr << "inserted: " << std::string(this->data + current, data.length) << "\n";
 
 	current += data.length;
 }

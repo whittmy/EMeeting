@@ -20,4 +20,3 @@ void SignalHandler::handle(int signal_number)
 {
 	exit_functions[signal_number]();
 }
-

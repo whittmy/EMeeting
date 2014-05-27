@@ -104,7 +104,7 @@ void EMServer::start()
 
 	std::thread (&EMServer::send_info_routine, this).detach();
 	udp_receive_routine();
-	std::thread (&EMServer::mixer_routine, this).detach();
+// 	std::thread (&EMServer::mixer_routine, this).detach();
 
 	io_service.run();
 }
@@ -243,7 +243,7 @@ uint EMServer::get_cid_from_address(const std::string &address)
 void EMServer::udp_receive_routine()
 {
 	udp_socket.async_receive_from(
-		boost::asio::buffer(buffer, get_buffer_length()), udp_endpoint,
+		boost::asio::buffer(buffer, BUFFER_SIZE), udp_endpoint,
 		boost::bind(&EMServer::handle_receive, this,
 			boost::asio::placeholders::error,
 			boost::asio::placeholders::bytes_transferred));
@@ -272,6 +272,7 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 					== 1) {
 					cid = get_cid_from_address(
 						udp_endpoint.address().to_string());
+					
 					for (index = 0; index < std::strlen(buffer) &&
 						buffer[index] != '\n'; ++index) {}
 					++index;
@@ -280,10 +281,12 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 						<< " (" << bytes_received << ")\n";
 
 					EM::Data data;
-					data.data = new char[bytes_received - index - 1];
+					data.data = new char[bytes_received - index];
 					std::memcpy(data.data, buffer + index,
-						bytes_received - index - 1);
-					data.length = bytes_received - index - 1;
+						bytes_received - index);
+					data.length = bytes_received - index;
+					
+					std::cerr << "input: " << std::string(data.data, data.length) << "\n";
 
 					ClientQueue &queue = clients[cid]->get_queue();
 					queue.insert(data, nr);
@@ -301,7 +304,8 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 				break;
 			}
 			default: {
-				std::cerr << "READ Unrecognized datagram: " << buffer;
+				std::cerr << "READ Unrecognized datagram: " << buffer << " (" 
+					<< bytes_received << ")\n";
 			}
 		}
 	}
@@ -337,7 +341,6 @@ void EMServer::send_data(uint cid, uint nr, uint ack, size_t win, EM::Data data)
 
 	std::memcpy(message + message_length, data.data, data.length);
 
-// 	boost::asio::socket_base::message_flags flags(0);
 	boost::system::error_code ec;
 
 	udp_socket.async_send_to(
@@ -348,13 +351,7 @@ void EMServer::send_data(uint cid, uint nr, uint ack, size_t win, EM::Data data)
 					std::cerr << "Sending DATA failed.\n";
 			}
 		);
-
-	/*udp_socket.send_to(
-		boost::asio::buffer(message, message_length + data.length), udp_endpoint,
-			flags, ec);
-	if (ec)
-		std::cerr << "Sending DATA failed.\n";*/
-}
+ }
 
 void EMServer::mixer_routine()
 {
@@ -404,4 +401,8 @@ void EMServer::mixer_routine()
 				p.second->get_queue().get_expected_nr(),
 				p.second->get_queue().get_available_space_size(),
 				data);
+	
+	timer.expires_from_now(boost::posix_time::milliseconds(get_tx_interval()));
+	timer.wait();
+	mixer_routine();
 }
