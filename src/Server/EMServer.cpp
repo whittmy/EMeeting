@@ -102,9 +102,9 @@ void EMServer::start()
 	std::cerr << "Accepting connections on port " << port << " (IPv4).\n";
 	start_accept();
 
+	std::thread (&EMServer::mixer_routine, this).detach();
 	std::thread (&EMServer::send_info_routine, this).detach();
 	udp_receive_routine();
-// 	std::thread (&EMServer::mixer_routine, this).detach();
 
 	io_service.run();
 }
@@ -143,9 +143,9 @@ void EMServer::add_client(uint cid)
 	clients_mutex.lock();
 	clients[cid] =
 		new ClientObject(cid,
-		                 get_fifo_size(),
-		                 get_fifo_low_watermark(),
-		                 get_fifo_high_watermark());
+			get_fifo_size(),
+			get_fifo_low_watermark(),
+			get_fifo_high_watermark());
 	clients_mutex.unlock();
 	std::cerr << "Added client: " << cid << "\n";
 }
@@ -175,7 +175,7 @@ void EMServer::start_accept()
 	tcp_acceptor->async_accept(
 		new_connection->get_socket(),
 		boost::bind(&EMServer::handle_accept, this, new_connection,
-		            boost::asio::placeholders::error));
+			boost::asio::placeholders::error));
 }
 
 void EMServer::handle_accept(
@@ -286,8 +286,6 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 						bytes_received - index);
 					data.length = bytes_received - index;
 					
-					std::cerr << "input: " << std::string(data.data, data.length) << "\n";
-
 					ClientQueue &queue = clients[cid]->get_queue();
 					queue.insert(data, nr);
 					send_ack(nr, queue.get_available_space_size());
@@ -367,7 +365,6 @@ void EMServer::mixer_routine()
 		new char[bytes_per_client * get_active_clients_number()];
 
 	size_t active_client = 0;
-	clients_mutex.lock();
 	for (auto p : clients) {
 		ClientObject *client = p.second;
 
@@ -379,22 +376,18 @@ void EMServer::mixer_routine()
 			inputs[active_client].consumed  = new size_t;
 		}
 	}
-	clients_mutex.unlock();
 
 	Mixer::mixer(inputs, get_active_clients_number(), data.data, &data.length,
 		get_tx_interval());
 
-	clients_mutex.lock();
 	for (size_t i = 0; i < get_active_clients_number(); ++i)
 		clients[client_number[i]]->get_queue().move(*inputs[i].consumed);
-	clients_mutex.unlock();
 
 	mixer_buffer.insert(data);
 
 	delete[] data.data;
 	data = mixer_buffer.get_data(mixer_buffer.get_index(), data.length);
 
-	clients_mutex.lock();
 	for (auto p : clients)
 		if (p.second->is_connected())
 			send_data(p.second->get_cid(), mixer_buffer.get_index(),

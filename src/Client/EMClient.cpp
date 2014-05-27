@@ -110,7 +110,7 @@ void EMClient::start()
 					received_message =
 						std::string(buf.begin(),
 							buf.begin() + bytes_read);
-// 					std::cerr << received_message;
+					std::cerr << received_message;
 				}
 				timer.expires_from_now(
 					boost::posix_time::milliseconds(
@@ -243,6 +243,7 @@ void EMClient::send_data_to_server()
 					return;
 				}
 			} while (datagram_client_server_number <= datagram_client_sent_number);
+			while (window_size > 0) {}
 		} while (window_size < buffer.get_size());
 	}
 
