@@ -13,8 +13,6 @@ class ClientQueue
 public:
 	ClientQueue(size_t fifo_size, size_t fifo_low_watermark, size_t fifo_high_watermark);
 
-	enum class State : uint8_t {Filling, Active};
-
 	void insert(EM::Data data, uint nr);
 	EM::Data get(size_t length);
 	void move(size_t length);
@@ -33,7 +31,8 @@ public:
 
 	uint get_expected_nr() const;
 
-	State get_current_state() const;
+	bool is_active() const;
+	bool is_filling() const;
 
 private:
 	void update_recent_data();
@@ -51,14 +50,16 @@ private:
 	uint nr;
 
 	DataBuffer buffer;
-
-	State state;
 };
 
 class ClientObject
 {
 public:
-	ClientObject(uint cid, size_t fifo_size, size_t fifo_low_watermark, size_t fifo_high_watermark);
+	ClientObject(
+		uint cid,
+		size_t fifo_size,
+		size_t fifo_low_watermark,
+		size_t fifo_high_watermark);
 
 	uint get_cid() const;
 	ClientQueue &get_queue();

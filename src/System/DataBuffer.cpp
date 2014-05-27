@@ -42,6 +42,7 @@ void DataBuffer::insert(EM::Data data)
 		end = current;
 		current = 0;
 	}
+	std::cerr << "current: " << current << ", length: " << data.length << ", size: " << size << "\n";
 	std::memcpy(this->data + current, data.data, data.length);
 
 	current += data.length;
@@ -49,6 +50,11 @@ void DataBuffer::insert(EM::Data data)
 
 EM::Data DataBuffer::get_data(uint number, size_t length)
 {
+	static const uint INDEX_MEMORY = 10;
+
+	if (indexes.find(number - INDEX_MEMORY) != indexes.end())
+		indexes.erase(indexes.find(number - INDEX_MEMORY));
+
 	/** number cannot(!) be greater than index + 1 */
 	if (index > number)
 		index = number;

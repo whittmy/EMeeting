@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 
 #include "Server/ClientObject.h"
 #include "System/Messages.h"
@@ -25,7 +26,11 @@ ClientQueue::ClientQueue(
 	nr(0),
 
 	buffer(fifo_size)
-{}
+{
+	assert(fifo_size >= fifo_high_watermark);
+	assert(fifo_high_watermark >= fifo_low_watermark);
+	assert(fifo_size > 0);
+}
 
 void ClientQueue::insert(EM::Data input, uint nr)
 {
@@ -34,9 +39,6 @@ void ClientQueue::insert(EM::Data input, uint nr)
 		return;
 	}
 	buffer.insert(input);
-
-	if (get_size() > fifo_high_watermark)
-		state = State::Active;
 
 	update_recent_data();
 
@@ -83,7 +85,7 @@ size_t ClientQueue::get_max_size() const
 
 size_t ClientQueue::get_available_space_size() const
 {
-	return get_max_size() - get_size();
+	return fifo_high_watermark - get_size();
 }
 
 size_t ClientQueue::get_bytes_inserted() const
@@ -111,9 +113,14 @@ uint ClientQueue::get_expected_nr() const
 	return nr + 1;
 }
 
-ClientQueue::State ClientQueue::get_current_state() const
+bool ClientQueue::is_active() const
 {
-	return state;
+	return get_size() >= fifo_high_watermark;
+}
+
+bool ClientQueue::is_filling() const
+{
+	return get_size() <= fifo_low_watermark;
 }
 
 void ClientQueue::update_recent_data()
@@ -143,7 +150,7 @@ uint ClientObject::get_cid() const
 
 bool ClientObject::is_active() const
 {
-	return queue.get_current_state() == ClientQueue::State::Active;
+	return queue.is_active();
 }
 
 ClientQueue &ClientObject::get_queue()
@@ -180,7 +187,7 @@ std::string ClientObject::get_report() const
 	char report[BUFFER_SIZE];
 
 	std::sprintf(report, EM::Messages::List.c_str(), get_name().c_str(), queue.get_size(),
-	             queue.get_max_size());
+		queue.get_max_size(), queue.get_min_recent_bytes(), queue.get_max_recent_bytes());
 
 	return std::string(report);
 }

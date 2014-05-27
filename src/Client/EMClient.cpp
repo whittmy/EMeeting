@@ -1,3 +1,4 @@
+#include <boost/bind.hpp>
 #include <boost/lexical_cast.hpp>
 #include <cstdio>
 #include <iostream>
@@ -76,17 +77,15 @@ void EMClient::start()
 	boost::system::error_code error;
 	boost::array<char, EM::Messages::LENGTH> buf;
 
-	bool connected = false;
-
 	std::string received_message;
 
 	boost::asio::deadline_timer timer(io_service);
 
 	while (true) {
 		repeat_twice {
-			connected = connect_tcp();
+			set_connected(connect_tcp());
 
-			if (connected)
+			if (is_connected())
 				std::thread (&EMClient::connect_udp, this).detach();
 			else
 				continue;
@@ -94,15 +93,15 @@ void EMClient::start()
 			static const uint MAX_DELAY = 3;
 			uint delay = 0;
 
-			while (connected) {
+			while (is_connected()) {
 				size_t bytes_read =
 					tcp_socket.read_some(boost::asio::buffer(buf), error);
 
 				if (error) {
 					/** When error is something other than nothing to read */
 					if (error.value() != boost::asio::error::eof ||
-					    delay > MAX_DELAY)
-						connected = false;
+						delay > MAX_DELAY)
+						set_connected(false);
 					else
 						++delay;
 				} else {
@@ -208,6 +207,8 @@ void EMClient::connect_udp()
 
 	std::cerr << "UDP connected!\n";
 
+	touch_connection();
+
 	std::thread (&EMClient::send_data_to_server, this).detach();
 	std::thread (&EMClient::read_data_from_server, this).detach();
 
@@ -243,7 +244,7 @@ void EMClient::send_data_to_server()
 					return;
 				}
 			} while (datagram_client_server_number <= datagram_client_sent_number);
-			while (window_size > 0) {}
+			while (window_size == 0) {}
 		} while (window_size < buffer.get_size());
 	}
 
@@ -264,6 +265,8 @@ void EMClient::read_data_from_server()
 		length =
 			udp_socket.receive_from(boost::asio::buffer(buffer, BUFFER_SIZE),
 			udp_endpoint, boost::asio::ip::udp::socket::message_flags(0), error);
+
+		touch_connection();
 
 		std::cerr << "READ " << buffer;
 
@@ -289,7 +292,8 @@ void EMClient::read_data_from_server()
 					data_mutex.unlock();
 					for (index = 0; index < std::strlen(buffer) &&
 						buffer[index] != '\n'; ++index) {}
-					out << buffer + index + 1;
+					out << std::string(buffer + index + 1,
+						length - index - 1);
 					data_mutex.lock();
 				}
 				break;
@@ -303,6 +307,28 @@ void EMClient::read_data_from_server()
 		}
 		data_mutex.unlock();
 	}
+}
+
+bool EMClient::is_connected() const
+{
+	mutex_connected.lock();
+	bool result = connected;
+	mutex_connected.unlock();
+	return result;
+}
+
+void EMClient::set_connected(bool connected)
+{
+	mutex_connected.lock();
+	this->connected = connected;
+	mutex_connected.unlock();
+}
+
+void EMClient::touch_connection()
+{
+	static boost::asio::deadline_timer timer(io_service);
+	timer.expires_from_now(boost::posix_time::seconds(CONNECTION_EXPIRY_TIME_SEC));
+	timer.async_wait(boost::bind(&EMClient::set_connected, this, false));
 }
 
 void EMClient::keep_alive_routine()
@@ -375,6 +401,8 @@ bool EMClient::wait_for_ack()
 	data_mutex.lock();
 	while (datagram_client_server_number <= datagram_client_sent_number) {
 		data_mutex.unlock();
+		if (!is_connected())
+			return false;
 		data_mutex.lock();
 	}
 	data_mutex.unlock();

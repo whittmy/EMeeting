@@ -14,10 +14,10 @@ public:
 	struct MixerInput {
 		void *data;
 		size_t length;
-		size_t *consumed;
+		size_t consumed;
 	};
 
-	typedef int16_t default_data_t;
+	typedef uint16_t data_t;
 
 	static const int DATA_MS_SIZE = 176;
 

@@ -27,18 +27,6 @@ public:
 	void quit();
 
 private:
-	bool connect_tcp();
-	bool read_init_message();
-
-	void connect_udp();
-	void send_data_to_server();
-	void read_data_from_server();
-
-	void keep_alive_routine();
-	bool ask_retransmit(uint number);
-	bool send_datagram(void *data, size_t length, uint number);
-	bool wait_for_ack();
-
 	std::istream &in;
 	std::ostream &out;
 
@@ -49,10 +37,36 @@ private:
 
 	uint retransmit_limit;
 
+	/** Connection */
+
+	bool is_connected() const;
+	void set_connected(bool connected);
+	void touch_connection();
+
+	static const uint CONNECTION_EXPIRY_TIME_SEC = 1;
+	mutable std::mutex mutex_connected;
+	bool connected;
+
 	boost::asio::io_service io_service;
+
+	/** TCP */
+
+	bool connect_tcp();
+	bool read_init_message();
 
 	boost::asio::ip::tcp::socket tcp_socket;
 	boost::asio::ip::tcp::resolver tcp_resolver;
+
+	/** UDP */
+
+	void connect_udp();
+	void send_data_to_server();
+	void read_data_from_server();
+
+	void keep_alive_routine();
+	bool ask_retransmit(uint number);
+	bool send_datagram(void *data, size_t length, uint number);
+	bool wait_for_ack();
 
 	boost::asio::ip::udp::socket udp_socket;
 	boost::asio::ip::udp::resolver udp_resolver;

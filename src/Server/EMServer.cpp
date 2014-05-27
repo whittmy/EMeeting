@@ -272,7 +272,7 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 					== 1) {
 					cid = get_cid_from_address(
 						udp_endpoint.address().to_string());
-					
+
 					for (index = 0; index < std::strlen(buffer) &&
 						buffer[index] != '\n'; ++index) {}
 					++index;
@@ -285,7 +285,7 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 					std::memcpy(data.data, buffer + index,
 						bytes_received - index);
 					data.length = bytes_received - index;
-					
+
 					ClientQueue &queue = clients[cid]->get_queue();
 					queue.insert(data, nr);
 					send_ack(nr, queue.get_available_space_size());
@@ -302,7 +302,7 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 				break;
 			}
 			default: {
-				std::cerr << "READ Unrecognized datagram: " << buffer << " (" 
+				std::cerr << "READ Unrecognized datagram: " << buffer << " ("
 					<< bytes_received << ")\n";
 			}
 		}
@@ -355,47 +355,50 @@ void EMServer::mixer_routine()
 {
 	boost::asio::deadline_timer timer(io_service);
 
-	Mixer::MixerInput inputs[get_active_clients_number()];
-	uint client_number[get_active_clients_number()];
+	if (get_active_clients_number() > 0) {
+		Mixer::MixerInput inputs[get_active_clients_number()];
+		uint client_number[get_active_clients_number()];
 
-	size_t bytes_per_client = get_tx_interval() * Mixer::DATA_MS_SIZE;
+		size_t bytes_per_client =
+			get_tx_interval() * Mixer::DATA_MS_SIZE;
 
-	EM::Data data;
-	data.data =
-		new char[bytes_per_client * get_active_clients_number()];
+		std::cerr << "expected bytes_for_client " << bytes_per_client << "\n";
 
-	size_t active_client = 0;
-	for (auto p : clients) {
-		ClientObject *client = p.second;
+		size_t data_length = bytes_per_client * get_active_clients_number();
+		char data[data_length];
 
-		if (client->is_active()) {
-			client_number[active_client] = client->get_cid();
-			EM::Data input_data = client->get_queue().get(bytes_per_client);
-			inputs[active_client].data      = input_data.data;
-			inputs[active_client].length    = input_data.length;
-			inputs[active_client].consumed  = new size_t;
+		size_t active_client = 0;
+		for (auto p : clients) {
+			ClientObject *client = p.second;
+
+			if (client->is_active()) {
+				client_number[active_client] = client->get_cid();
+				EM::Data input_data = client->get_queue().get(bytes_per_client);
+
+				inputs[active_client].data   = input_data.data;
+				inputs[active_client].length = input_data.length;
+			}
 		}
+
+		Mixer::mixer(inputs, get_active_clients_number(), data, &data_length,
+			get_tx_interval());
+
+		for (size_t i = 0; i < get_active_clients_number(); ++i)
+			clients[client_number[i]]->get_queue().move(inputs[i].consumed);
+
+		mixer_buffer.insert({data, data_length});
+
+		EM::Data data_to_send =
+			mixer_buffer.get_data(mixer_buffer.get_index(), data_length);
+
+		for (auto p : clients)
+			if (p.second->is_connected())
+				send_data(p.second->get_cid(), mixer_buffer.get_index(),
+					p.second->get_queue().get_expected_nr(),
+					p.second->get_queue().get_available_space_size(),
+					data_to_send);
 	}
 
-	Mixer::mixer(inputs, get_active_clients_number(), data.data, &data.length,
-		get_tx_interval());
-
-	for (size_t i = 0; i < get_active_clients_number(); ++i)
-		clients[client_number[i]]->get_queue().move(*inputs[i].consumed);
-
-	mixer_buffer.insert(data);
-
-	delete[] data.data;
-	data = mixer_buffer.get_data(mixer_buffer.get_index(), data.length);
-
-	for (auto p : clients)
-		if (p.second->is_connected())
-			send_data(p.second->get_cid(), mixer_buffer.get_index(),
-				p.second->get_queue().get_expected_nr(),
-				p.second->get_queue().get_available_space_size(),
-				data);
-	
 	timer.expires_from_now(boost::posix_time::milliseconds(get_tx_interval()));
-	timer.wait();
-	mixer_routine();
+	timer.async_wait(boost::bind(&EMServer::mixer_routine, this));
 }
