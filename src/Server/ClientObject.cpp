@@ -22,16 +22,18 @@ ClientQueue::ClientQueue(
 	recent_min(0),
 	recent_max(0),
 
-	nr(0)
+	nr(0),
+
+	buffer(fifo_size)
 {}
 
-void ClientQueue::push(ClientQueue::Data input, uint nr)
+void ClientQueue::insert(EM::Data input, uint nr)
 {
 	if (get_size() + input.length > get_max_size() || nr <= this->nr) {
 		std::cerr << "Package dropped!\n";
 		return;
 	}
-	queue.push(input);
+	buffer.insert(input);
 
 	std::cerr << "input from client: " << input.data << " (" << input.length << ")\n";
 
@@ -46,24 +48,14 @@ void ClientQueue::push(ClientQueue::Data input, uint nr)
 	this->nr = nr;
 }
 
-ClientQueue::Data ClientQueue::pop()
+EM::Data ClientQueue::get(size_t length)
 {
-	Data input = front();
-	queue.pop();
-
-	if (get_size() < fifo_low_watermark)
-		state = State::Filling;
-
-	update_recent_data();
-
-	current_size -= input.length;
-
-	return input;
+	return buffer.raw_read(length);
 }
 
-ClientQueue::Data ClientQueue::front()
+void ClientQueue::move(size_t length)
 {
-	return queue.front();
+	buffer.raw_move(length);
 }
 
 bool ClientQueue::is_full() const
@@ -77,10 +69,8 @@ void ClientQueue::clear()
 	bytes_inserted = 0;
 	recent_min     = 0;
 	recent_max     = 0;
-	while (!queue.empty()) {
-		ClientQueue::Data d = pop();
-		delete d.data;
-	}
+	buffer.clear();
+	buffer.init();
 }
 
 size_t ClientQueue::get_size() const
@@ -153,6 +143,11 @@ uint ClientObject::get_cid() const
 	return cid;
 }
 
+bool ClientObject::is_active() const
+{
+	return queue.get_current_state() == ClientQueue::State::Active;
+}
+
 ClientQueue &ClientObject::get_queue()
 {
 	return queue;
@@ -190,4 +185,14 @@ std::string ClientObject::get_report() const
 	             queue.get_max_size());
 
 	return std::string(report);
+}
+
+void ClientObject::set_udp_endpoint(boost::asio::ip::udp::endpoint udp_endpoint)
+{
+	this->udp_endpoint = udp_endpoint;
+}
+
+boost::asio::ip::udp::endpoint ClientObject::get_udp_endpoint()
+{
+	return udp_endpoint;
 }

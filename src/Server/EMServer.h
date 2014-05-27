@@ -47,6 +47,7 @@ private:
 	void handle_accept(TcpConnection::Pointer new_connection,
 	                   const boost::system::error_code &error);
 	void send_info_routine();
+	uint get_connected_clients_number() const;
 	uint get_active_clients_number() const;
 
 	uint get_cid_from_address(const std::string &address);
@@ -54,6 +55,9 @@ private:
 	void udp_receive_routine();
 	void handle_receive(const boost::system::error_code &ec, size_t bytes_received);
 	void send_ack(uint nr, size_t win);
+	void send_data(uint cid, uint nr, uint ack, size_t win, EM::Data data);
+
+	void mixer_routine();
 
 	uint port;
 
@@ -74,9 +78,12 @@ private:
 	boost::asio::ip::udp::socket udp_socket;
 	boost::asio::ip::udp::endpoint udp_endpoint;
 
-	static const size_t BUFFER_SIZE = 65536;
+	static const size_t BUFFER_SIZE            = 65536;
+	static const size_t EXPECTED_CLIENTS_LIMIT = 16;
 
 	char buffer[BUFFER_SIZE];
+
+	DataBuffer mixer_buffer;
 };
 
 #endif // EMSERVER_H

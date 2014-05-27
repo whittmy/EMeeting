@@ -25,7 +25,9 @@ EMServer::EMServer() :
 
 	io_service(),
 
-	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port))
+	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port)),
+
+	mixer_buffer(BUFFER_SIZE * EXPECTED_CLIENTS_LIMIT)
 {}
 
 EMServer::~EMServer()
@@ -102,6 +104,7 @@ void EMServer::start()
 
 	std::thread (&EMServer::send_info_routine, this).detach();
 	udp_receive_routine();
+	std::thread (&EMServer::mixer_routine, this).detach();
 
 	io_service.run();
 }
@@ -193,7 +196,7 @@ void EMServer::send_info_routine()
 	while (true) {
 		timer.expires_from_now(boost::posix_time::milliseconds(SEND_INFO_TIMEOUT_MS));
 		timer.wait();
-		if (get_active_clients_number() > 0) {
+		if (get_connected_clients_number() > 0) {
 			std::cerr << "SEND INFO\n";
 			std::string report("\n");
 
@@ -209,12 +212,22 @@ void EMServer::send_info_routine()
 	}
 }
 
-uint EMServer::get_active_clients_number() const
+uint EMServer::get_connected_clients_number() const
 {
 	uint cnt = 0;
 	clients_mutex.lock();
 	for (auto p : clients)
 		cnt += (int) (p.second->is_connected());
+	clients_mutex.unlock();
+	return cnt;
+}
+
+uint EMServer::get_active_clients_number() const
+{
+	uint cnt = 0;
+	clients_mutex.lock();
+	for (auto p : clients)
+		cnt += (int) (p.second->is_active());
 	clients_mutex.unlock();
 	return cnt;
 }
@@ -249,6 +262,7 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 					std::cerr << "READ " << buffer;
 				else
 					std::cerr << "READ invalid CLIENT datagram.\n";
+				clients[cid]->set_udp_endpoint(udp_endpoint);
 				break;
 			}
 			case EM::Messages::Type::Upload: {
@@ -265,13 +279,14 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 					std::cerr << "READ UPLOAD " << nr << " from " << cid
 						<< " (" << bytes_received << ")\n";
 
-					ClientQueue::Data data;
+					EM::Data data;
 					data.data = new char[bytes_received - index - 1];
 					std::memcpy(data.data, buffer + index,
 						bytes_received - index - 1);
+					data.length = bytes_received - index - 1;
 
 					ClientQueue &queue = clients[cid]->get_queue();
-					queue.push(data, nr);
+					queue.insert(data, nr);
 					send_ack(nr, queue.get_available_space_size());
 				} else {
 					std::cerr << "READ invalid UPLOAD datagram.\n";
@@ -285,8 +300,9 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 			case EM::Messages::Type::KeepAlive: {
 				break;
 			}
-			default:
+			default: {
 				std::cerr << "READ Unrecognized datagram: " << buffer;
+			}
 		}
 	}
 	udp_receive_routine();
@@ -307,4 +323,85 @@ void EMServer::send_ack(uint nr, size_t win)
 					std::cerr << "Sending ACK failed.\n";
 			}
 		);
+}
+
+void EMServer::send_data(uint cid, uint nr, uint ack, size_t win, EM::Data data)
+{
+	udp_endpoint = clients[cid]->get_udp_endpoint();
+
+	char message[EM::Messages::LENGTH + BUFFER_SIZE];
+	std::sprintf(message, EM::Messages::Data.c_str(), nr, ack, win);
+	size_t message_length = std::strlen(message);
+
+	std::cerr << "SEND " << message;
+
+	std::memcpy(message + message_length, data.data, data.length);
+
+// 	boost::asio::socket_base::message_flags flags(0);
+	boost::system::error_code ec;
+
+	udp_socket.async_send_to(
+		boost::asio::buffer(message, message_length + data.length), udp_endpoint,
+			[this](const boost::system::error_code &ec, size_t bytes_received)
+			{
+				if (ec)
+					std::cerr << "Sending DATA failed.\n";
+			}
+		);
+
+	/*udp_socket.send_to(
+		boost::asio::buffer(message, message_length + data.length), udp_endpoint,
+			flags, ec);
+	if (ec)
+		std::cerr << "Sending DATA failed.\n";*/
+}
+
+void EMServer::mixer_routine()
+{
+	boost::asio::deadline_timer timer(io_service);
+
+	Mixer::MixerInput inputs[get_active_clients_number()];
+	uint client_number[get_active_clients_number()];
+
+	size_t bytes_per_client = get_tx_interval() * Mixer::DATA_MS_SIZE;
+
+	EM::Data data;
+	data.data =
+		new char[bytes_per_client * get_active_clients_number()];
+
+	size_t active_client = 0;
+	clients_mutex.lock();
+	for (auto p : clients) {
+		ClientObject *client = p.second;
+
+		if (client->is_active()) {
+			client_number[active_client] = client->get_cid();
+			EM::Data input_data = client->get_queue().get(bytes_per_client);
+			inputs[active_client].data      = input_data.data;
+			inputs[active_client].length    = input_data.length;
+			inputs[active_client].consumed  = new size_t;
+		}
+	}
+	clients_mutex.unlock();
+
+	Mixer::mixer(inputs, get_active_clients_number(), data.data, &data.length,
+		get_tx_interval());
+
+	clients_mutex.lock();
+	for (size_t i = 0; i < get_active_clients_number(); ++i)
+		clients[client_number[i]]->get_queue().move(*inputs[i].consumed);
+	clients_mutex.unlock();
+
+	mixer_buffer.insert(data);
+
+	delete[] data.data;
+	data = mixer_buffer.get_data(mixer_buffer.get_index(), data.length);
+
+	clients_mutex.lock();
+	for (auto p : clients)
+		if (p.second->is_connected())
+			send_data(p.second->get_cid(), mixer_buffer.get_index(),
+				p.second->get_queue().get_expected_nr(),
+				p.second->get_queue().get_available_space_size(),
+				data);
 }

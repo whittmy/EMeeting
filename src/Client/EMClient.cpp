@@ -4,9 +4,9 @@
 #include <thread>
 #include <unistd.h>
 
-#include "Client/DataBuffer.h"
 #include "Client/EMClient.h"
 #include "System/AbstractServer.h"
+#include "System/DataBuffer.h"
 #include "System/Messages.h"
 #include "System/Utils.h"
 
@@ -354,6 +354,10 @@ bool EMClient::send_datagram(void *data, size_t length, uint number)
 	std::cerr << "SEND " << output.c_array();
 
 	std::memcpy(output.c_array() + message_length, data, length);
+
+	output[message_length] = 'x';
+	output[message_length + 1] = '\n';
+	output[message_length + 2] = '\0';
 
 	std::cerr << "sending " << output.c_array() << "\n" << " (" << message_length << " + " << length << " bytes)\n";
 

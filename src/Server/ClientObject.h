@@ -1,11 +1,11 @@
 #ifndef CLIENTOBJECT_H
 #define CLIENTOBJECT_H
 
-#include <queue>
+#include <cctype>
 #include <string>
-#include <sys/types.h>
 
 #include "Server/TcpConnection.h"
+#include "System/DataBuffer.h"
 #include "System/Mixer.h"
 
 class ClientQueue
@@ -15,16 +15,9 @@ public:
 
 	enum class State : uint8_t {Filling, Active};
 
-	struct Data {
-		Data(char *d = nullptr, size_t l = 0) : data(d), length(l) {}
-
-		char *data;
-		size_t length;
-	};
-
-	void push(Data data, uint nr);
-	Data pop();
-	Data front();
+	void insert(EM::Data data, uint nr);
+	EM::Data get(size_t length);
+	void move(size_t length);
 	bool is_full() const;
 
 	void clear();
@@ -57,7 +50,7 @@ private:
 
 	uint nr;
 
-	std::queue<Data> queue;
+	DataBuffer buffer;
 
 	State state;
 };
@@ -70,6 +63,8 @@ public:
 	uint get_cid() const;
 	ClientQueue &get_queue();
 
+	bool is_active() const;
+
 	std::string get_name() const;
 
 	void set_connection(TcpConnection::Pointer connection);
@@ -78,11 +73,15 @@ public:
 
 	std::string get_report() const;
 
+	void set_udp_endpoint(boost::asio::ip::udp::endpoint udp_endpoint);
+	boost::asio::ip::udp::endpoint get_udp_endpoint();
+
 private:
 	uint cid;
 	ClientQueue queue;
 
 	TcpConnection::Pointer connection;
+	boost::asio::ip::udp::endpoint udp_endpoint;
 };
 
 #endif // CLIENTOBJECT_H

@@ -1,5 +1,4 @@
 set (EMClient_SRCS
-	DataBuffer.cpp
 	EMClient.cpp
 	main.cpp
 )
