@@ -51,14 +51,17 @@ namespace EM {
 		Type get_type(const std::string &str);
 		Type get_type(const char *str, size_t length);
 
+		bool read_client(const std::string &message, uint &nr);
+
 		bool read_data(
-			const char *buffer,
-			size_t length,
+			const std::string &message,
 			uint &nr,
 			uint &ack,
 			size_t &win);
 
-		bool read_ack(const char *buffer, size_t length, uint &ack, size_t &win);
+		bool read_ack(const std::string &message, uint &ack, size_t &win);
+
+		size_t get_first_endline_index(const std::string &str);
 	}
 }
 

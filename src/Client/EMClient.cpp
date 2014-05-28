@@ -7,7 +7,6 @@
 
 #include "Client/EMClient.h"
 #include "System/AbstractServer.h"
-#include "System/DataBuffer.h"
 #include "System/Messages.h"
 #include "System/Utils.h"
 
@@ -26,11 +25,7 @@ EMClient::EMClient(std::istream &in, std::ostream &out) :
 	tcp_resolver(io_service),
 
 	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 0)),
-	udp_resolver(io_service),
-
-	acknowledged(0),
-
-	datagram_server_client_number(0)
+	udp_resolver(io_service)
 {}
 
 EMClient::~EMClient()
@@ -116,12 +111,36 @@ void EMClient::start()
 			}
 			std::cerr << "Disconnected!\n";
 		}
-		sleep(1);
+		timer.expires_from_now(
+			boost::posix_time::seconds(CONNECTION_RETRY_TIME_SEC));
+		timer.wait();
 	}
 }
 
 void EMClient::quit()
 {}
+
+bool EMClient::is_connected() const
+{
+	mutex_connected.lock();
+	bool result = connected;
+	mutex_connected.unlock();
+	return result;
+}
+
+void EMClient::set_connected(bool connected)
+{
+	mutex_connected.lock();
+	this->connected = connected;
+	mutex_connected.unlock();
+}
+
+void EMClient::touch_connection()
+{
+	static boost::asio::deadline_timer timer(io_service);
+	timer.expires_from_now(boost::posix_time::seconds(CONNECTION_EXPIRY_TIME_SEC));
+	timer.async_wait(boost::bind(&EMClient::set_connected, this, false));
+}
 
 bool EMClient::connect_tcp()
 {
@@ -153,41 +172,25 @@ bool EMClient::read_init_message()
 	std::cerr << "Reading network initialization message... ";
 
 	size_t length = tcp_socket.read_some(boost::asio::buffer(buf), error);
-	std::memset((void *) (&buf[0] + length), (int) '\0', EM::Messages::LENGTH - length);
 
 	if (error)
 		return false;
 
 	std::string received_message(buf.begin(), buf.begin() + length);
 
-	if (!(length > 6 && received_message.substr(0, 6) ==
-		EM::Messages::Client.substr(0, 6)))
-		return false;
-
-	std::cerr << "received message: " << received_message;
-
-	received_message =
-		EM::trimmed(EM::without_endline(received_message.substr(6)));
-
-	try {
-		cid = boost::lexical_cast<uint>(received_message);
-	} catch (boost::bad_lexical_cast) {
-		std::cerr << "Received invalid client id: \""
-				<< received_message << "\"\n";
-		return false;
-	}
-
-	return true;
+	return EM::Messages::read_client(received_message, cid);
 }
 
 void EMClient::connect_udp()
 {
 	std::cerr << "Establishing UDP connection...\n";
 
-	char request[EM::Messages::LENGTH];
-	std::sprintf(request, EM::Messages::Client.c_str(), cid);
+	std::string request(EM::Messages::LENGTH, '\0');
+	std::sprintf(&request[0], EM::Messages::Client.c_str(), cid);
 
 	boost::system::error_code error;
+
+	boost::asio::deadline_timer timer(io_service);
 
 	do {
 		udp_endpoint = *udp_resolver.resolve({
@@ -196,207 +199,28 @@ void EMClient::connect_udp()
 			boost::lexical_cast<std::string>(get_port())});
 
 		for (int i = 0; i == 0 || (i == 1 && error); ++i)
-			udp_socket.send_to(boost::asio::buffer(request, std::strlen(request)),
+			udp_socket.send_to(boost::asio::buffer(request),
 				udp_endpoint, boost::asio::ip::udp::socket::message_flags(0),
 				error);
-		if (error)
-			sleep(1);
+		if (error) {
+			timer.expires_from_now(
+				boost::posix_time::seconds(CONNECTION_RETRY_TIME_SEC));
+			timer.wait();
+		}
 	} while (error);
 
 	std::cerr << "UDP connected!\n";
 
 	touch_connection();
 
-	std::thread (&EMClient::server_interaction, this).detach();
+	std::thread (&EMClient::server_interaction_routine, this).detach();
 
 	return keep_alive_routine();
 }
 
-void EMClient::server_interaction()
-{
-	std::string input_buffer;
-	boost::asio::buffer<char, MSG_SIZE> server_buffer;
-	boost::system::error_code error;
-
-	size_t length;
-
-	/** Small, initial window size */
-	window_size = 64;
-
-	while (is_connected()) {
-		insert_input(input_buffer);
-
-		length =
-			udp_socket.receive_from(boost::asio::buffer(server_buffer, BUFFER_SIZE),
-			udp_endpoint, boost::asio::ip::udp::socket::message_flags(0), error);
-
-		if (error)
-			set_connected(false);
-
-		switch (EM::Messages::get_type(server_buffer.c_array(), server_buffer.size())) {
-			case EM::Messages::Type::Ack: {
-				uint ack;
-				size_t win;
-				if (!EM::Messages::read_ack(server_buffer, length, ack, win))
-					break;
-				std::cerr << "READ "
-					<< std::string(server_buffer.c_array(),
-						server_buffer.size());
-
-				acknowledged = ack;
-				window_size  = win;
-			}
-			case EM::Messages::Type::Data: {
-				uint nr, ack;
-				size_t win;
-				if (!EM::Messages::read_data(server_buffer, length, nr, ack, win))
-					break;
-
-				for (index = 0; index < length &&
-					server_buffer[index] != '\n'; ++index) {}
-				++index;
-				out << server_buffer.substr(index);
-
-				std::cerr << "READ ";
-			}
-
-		} // nr ack win
-	}
-}
-
-void EMClient::insert_input(std::string &str, size_t length)
-{
-	std::string input;
-	while (str.size() < length && in.getline(input))
-		str += input;
-}
-
-void EMClient::send_data_to_server()
-{
-	DataBuffer buffer(BUFFER_SIZE);
-
-	char input[MSG_SIZE];
-
-	/** Small, initial value */
-	window_size = 64;
-
-	while (true) {
-		while (buffer.get_size() < MSG_SIZE && in.getline(input, MSG_SIZE))
-			buffer.insert({input, std::strlen(input)});
-
-		EM::Data data = buffer.get_data(datagram_client_server_number, window_size);
-
-		if (data.length == 0)
-			continue;
-
-		++datagram_client_input_number;
-
-		do {
-			if (!send_datagram(data.data, data.length,
-				datagram_client_server_number)) {
-				buffer.clear();
-				return;
-			} else {
-				++datagram_client_sent_number;
-			}
-
-			if (!wait_for_ack()) {
-				buffer.clear();
-				return;
-			}
-		} while (datagram_client_server_number <= datagram_client_sent_number);
-		if (window_size == 0) {
-			if (!wait_for_window()) {
-				buffer.clear();
-				return;
-			}
-		}
-	}
-}
-
-void EMClient::read_data_from_server()
-{
-	char *buffer = new char[BUFFER_SIZE];
-
-	uint ack = 0, nr = 0;
-	size_t win = 0;
-	size_t index;
-	size_t length;
-	boost::system::error_code error;
-
-	while (true) {
-		length =
-			udp_socket.receive_from(boost::asio::buffer(buffer, BUFFER_SIZE),
-			udp_endpoint, boost::asio::ip::udp::socket::message_flags(0), error);
-
-		touch_connection();
-
-		if (error) {
-			delete[] buffer;
-			return;
-		}
-
-		EM::Messages::Type type = EM::Messages::get_type(buffer, length);
-
-		data_mutex.lock();
-		switch (type) {
-			case EM::Messages::Type::Data:
-				if (!EM::Messages::read_data(
-					buffer, EM::Messages::LENGTH, nr, ack, win))
-					break;
-				datagram_client_server_number = ack;
-				window_size = win;
-				std::cerr << "READ DATA " << ack << " " << win << " (length: "
-					<< length << ")\n";
-
-				if (nr > datagram_server_client_number &&
-					datagram_server_client_number != 0) {
-					ask_retransmit(datagram_server_client_number);
-				} else {
-					data_mutex.unlock();
-
-					data_mutex.lock();
-				}
-				break;
-			case EM::Messages::Type::Ack:
-				std::cerr << "READ " << buffer;
-				if (!EM::Messages::read_ack(buffer, length, ack, win))
-					break;
-				datagram_client_server_number = ack;
-				window_size = win;
-				break;
-			default:;
-		}
-		data_mutex.unlock();
-	}
-}
-
-bool EMClient::is_connected() const
-{
-	mutex_connected.lock();
-	bool result = connected;
-	mutex_connected.unlock();
-	return result;
-}
-
-void EMClient::set_connected(bool connected)
-{
-	mutex_connected.lock();
-	this->connected = connected;
-	mutex_connected.unlock();
-}
-
-void EMClient::touch_connection()
-{
-	static boost::asio::deadline_timer timer(io_service);
-	timer.expires_from_now(boost::posix_time::seconds(CONNECTION_EXPIRY_TIME_SEC));
-	timer.async_wait(boost::bind(&EMClient::set_connected, this, false));
-}
-
 void EMClient::keep_alive_routine()
 {
-	boost::asio::deadline_timer timer(
-		io_service, boost::posix_time::milliseconds(KEEP_ALIVE_FREQUENCY));
+	boost::asio::deadline_timer timer(io_service);
 
 	char request[EM::Messages::LENGTH];
 	std::sprintf(request, EM::Messages::KeepAlive.c_str());
@@ -404,16 +228,116 @@ void EMClient::keep_alive_routine()
 	boost::system::error_code error;
 
 	while (true) {
-		timer.expires_from_now(boost::posix_time::milliseconds(KEEP_ALIVE_FREQUENCY));
+		timer.expires_from_now(boost::posix_time::milliseconds(KEEP_ALIVE_TIMEOUT_MS));
 		timer.wait();
 
-// 		std::cerr << "Sending KEEPALIVE\n";
 		udp_socket.send_to(
 			boost::asio::buffer(request, std::strlen(request)), udp_endpoint,
 			boost::asio::ip::udp::socket::message_flags(0), error);
 		if (error)
 			return connect_udp();
 	}
+}
+
+void EMClient::server_interaction_routine()
+{
+	messages.clear();
+	input_buffer.clear();
+
+	acknowledged = 0;
+	sent         = 0;
+	expected     = 0;
+	window_size  = 64;
+
+	boost::system::error_code error;
+	boost::array<char, BUFFER_SIZE> buf;
+
+	/** We send anything to get going */
+	send_data(std::string("INITIAL MESSAGE\n"), sent);
+
+	while (is_connected()) {
+		insert_input();
+
+		size_t length =
+			udp_socket.receive_from(boost::asio::buffer(buf),
+			udp_endpoint, boost::asio::ip::udp::socket::message_flags(0), error);
+		output_buffer = std::string(buf.begin(), buf.begin() + length);
+
+		if (error)
+			set_connected(false);
+
+		switch (EM::Messages::get_type(output_buffer)) {
+			case EM::Messages::Type::Ack: {
+				uint ack;
+				size_t win;
+				if (!EM::Messages::read_ack(output_buffer, ack, win))
+					break;
+				std::cerr << "READ "
+					<< output_buffer;
+
+				acknowledged = ack;
+				window_size  = win;
+
+				manage_messages();
+
+				break;
+			}
+			case EM::Messages::Type::Data: {
+				uint nr, ack;
+				size_t win;
+				if (!EM::Messages::read_data(output_buffer, nr, ack, win))
+					break;
+
+				acknowledged = ack;
+				window_size  = win;
+
+				size_t index =
+					EM::Messages::get_first_endline_index(output_buffer);
+				out << output_buffer.substr(index + 1);
+				std::cerr << "READ " << output_buffer.substr(0, index + 1);
+
+				if (nr > expected && nr - expected <= get_retransmit_limit()) {
+					ask_retransmit(expected);
+				} else {
+					expected = nr + 1;
+					manage_messages();
+				}
+
+				break;
+			}
+			default:;
+				/** Ignored */
+
+		}
+	}
+}
+
+void EMClient::insert_input()
+{
+	std::string input;
+	while (input_buffer.size() < BUFFER_SIZE
+		&& std::getline(in, input))
+		input_buffer += input;
+}
+
+void EMClient::manage_messages()
+{
+	if (acknowledged < sent && acknowledged != 0) {
+		for (uint i = acknowledged; i < sent; ++i)
+			if (messages.find(i) != messages.end())
+				send_data(messages[i], i);
+	} else if (window_size >= MIN_DATA_SIZE) {
+		size_t length  = std::min(input_buffer.size(), window_size);
+		messages[sent] = input_buffer.substr(0, length);
+		input_buffer   = input_buffer.substr(length);
+		send_data(messages[sent], sent);
+		++sent;
+		window_size -= length;
+	}
+
+	auto old_msg_it = messages.find(sent - get_retransmit_limit() - 1);
+	if (old_msg_it != messages.end())
+		messages.erase(old_msg_it);
 }
 
 bool EMClient::ask_retransmit(uint number)
@@ -432,15 +356,15 @@ bool EMClient::ask_retransmit(uint number)
 	return (bool) !error;
 }
 
-bool EMClient::send_datagram(const std::string &data, uint number)
+bool EMClient::send_data(const std::string &data, uint number)
 {
-	std::string output(EM::Messages::LENGTH, " ");
+	std::string output(EM::Messages::LENGTH, '\0');
 	boost::system::error_code error;
 
 	std::sprintf(&output[0] , EM::Messages::Upload.c_str(), number);
-	output.resize(std::strlen(output));
+	output = output.substr(0, EM::Messages::get_first_endline_index(output) + 1);
 
-	std::cerr << "SEND " << output;
+	std::cerr << "SEND (" << data.size() << ") " << output;
 
 	output += data;
 

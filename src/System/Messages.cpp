@@ -17,10 +17,25 @@ EM::Messages::Type EM::Messages::get_type(const char *str, size_t length)
 	return get_type(std::string(str, length));
 }
 
-bool EM::Messages::read_data(const char *buffer, size_t length, uint &nr, uint &ack, size_t &win)
+bool EM::Messages::read_client(const std::string &str, uint &nr)
 {
 	std::string s;
-	std::stringstream ss(std::string(buffer, length));
+	std::stringstream ss(str);
+
+	ss >> s;
+	if (s != Headers::Client)
+		return false;
+
+	ss >> nr;
+
+	return !ss.bad();
+}
+
+
+bool EM::Messages::read_data(const std::string &message, uint &nr, uint &ack, size_t &win)
+{
+	std::string s;
+	std::stringstream ss(message);
 
 	ss >> s;
 	if (s != Headers::Data)
@@ -31,10 +46,10 @@ bool EM::Messages::read_data(const char *buffer, size_t length, uint &nr, uint &
 	return !ss.bad();
 }
 
-bool EM::Messages::read_ack(const char *buffer, size_t length, uint &ack, size_t &win)
+bool EM::Messages::read_ack(const std::string &message, uint &ack, size_t &win)
 {
 	std::string s;
-	std::stringstream ss(std::string(buffer, length));
+	std::stringstream ss(message);
 
 	ss >> s;
 	if (s != Headers::Ack)
@@ -43,4 +58,12 @@ bool EM::Messages::read_ack(const char *buffer, size_t length, uint &ack, size_t
 	ss >> ack >> win;
 
 	return !ss.bad();
+}
+
+size_t EM::Messages::get_first_endline_index(const std::string &str)
+{
+	size_t index = 0;
+	while (index < str.size() && str[index] != '\n')
+		++index;
+	return index;
 }

@@ -44,6 +44,7 @@ private:
 	void touch_connection();
 
 	static const uint CONNECTION_EXPIRY_TIME_SEC = 1;
+	static const uint CONNECTION_RETRY_TIME_SEC  = 1;
 	mutable std::mutex mutex_connected;
 	bool connected;
 
@@ -60,32 +61,35 @@ private:
 	/** UDP */
 
 	void connect_udp();
-
-	void server_interaction();
-	void insert_input(std::string &str);
-
 	void keep_alive_routine();
-	bool ask_retransmit(uint number);
-	bool send_datagram(const std::string &data, uint number);
-	bool wait_for_ack();
-	bool wait_for_window();
 
-	boost::asio::ip::udp::socket udp_socket;
+	static const uint KEEP_ALIVE_TIMEOUT_MS = 500;
+
+	void server_interaction_routine();
+	void insert_input();
+	void manage_messages();
+	void print_data();
+
+	std::unordered_map<uint, std::string> messages;
+	std::string input_buffer;
+	std::string output_buffer;
+
+	uint   acknowledged;
+	uint   sent;
+	uint   expected;
+	size_t window_size;
+
+	bool ask_retransmit(uint number);
+	bool send_data(const std::string &data, uint number);
+
+	static const size_t MIN_DATA_SIZE = 16;
+
+	boost::asio::ip::udp::socket   udp_socket;
 	boost::asio::ip::udp::resolver udp_resolver;
 	boost::asio::ip::udp::endpoint udp_endpoint;
 
 	static const size_t BUFFER_SIZE = 65536 << 2;
 	static const size_t MSG_SIZE    = 65536;
-
-	static const uint KEEP_ALIVE_FREQUENCY = 500;
-
-	std::mutex data_mutex;
-
-	uint acknowledged;
-	size_t window_size;
-
-	/** expected by the client */
-	uint datagram_server_client_number;
 };
 
 #endif // EMCLIENT_H
