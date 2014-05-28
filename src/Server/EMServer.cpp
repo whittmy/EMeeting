@@ -110,15 +110,7 @@ void EMServer::start()
 }
 
 void EMServer::quit()
-{
-	std::cerr << "\nClearing server resources.\n";
-
-	/*clients_mutex.lock();
-	for (auto obj : clients)
-		delete obj.second;
-	clients.clear();
-	clients_mutex.unlock();*/
-}
+{}
 
 uint EMServer::get_next_cid()
 {
@@ -278,13 +270,15 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 					++index;
 
 					std::cerr << "READ UPLOAD " << nr << " from " << cid
-						<< " (" << bytes_received << ")\n";
+						<< " (" << bytes_received - index << ")\n";
 
 					EM::Data data;
 					data.data = new char[bytes_received - index];
 					std::memcpy(data.data, buffer + index,
 						bytes_received - index);
 					data.length = bytes_received - index;
+
+// 					std::cout << std::string(data.data, data.length);
 
 					ClientQueue &queue = clients[cid]->get_queue();
 					queue.insert(data, nr);
@@ -359,12 +353,7 @@ void EMServer::mixer_routine()
 		Mixer::MixerInput inputs[get_active_clients_number()];
 		uint client_number[get_active_clients_number()];
 
-		size_t bytes_per_client =
-			get_tx_interval() * Mixer::DATA_MS_SIZE;
-
-		std::cerr << "expected bytes_for_client " << bytes_per_client << "\n";
-
-		size_t data_length = bytes_per_client * get_active_clients_number();
+		size_t data_length = get_tx_interval() * Mixer::DATA_MS_SIZE;;
 		char data[data_length];
 
 		size_t active_client = 0;
@@ -373,7 +362,7 @@ void EMServer::mixer_routine()
 
 			if (client->is_active()) {
 				client_number[active_client] = client->get_cid();
-				EM::Data input_data = client->get_queue().get(bytes_per_client);
+				EM::Data input_data = client->get_queue().get(data_length);
 
 				inputs[active_client].data   = input_data.data;
 				inputs[active_client].length = input_data.length;
@@ -383,8 +372,12 @@ void EMServer::mixer_routine()
 		Mixer::mixer(inputs, get_active_clients_number(), data, &data_length,
 			get_tx_interval());
 
-		for (size_t i = 0; i < get_active_clients_number(); ++i)
+		for (size_t i = 0; i < get_active_clients_number(); ++i) {
+			std::cerr << "consumed: " << inputs[i].consumed << "\n";
+			std::cerr << "clients queue.size = " << clients[client_number[i]]->get_queue().get_size() << "\n";
 			clients[client_number[i]]->get_queue().move(inputs[i].consumed);
+			std::cerr << "clients queue.size = " << clients[client_number[i]]->get_queue().get_size() << "\n";
+		}
 
 		mixer_buffer.insert({data, data_length});
 

@@ -12,11 +12,14 @@ namespace EM {
 	};
 }
 
+/**
+ * \class DataBuffer
+ */
 class DataBuffer
 {
 public:
 	DataBuffer(size_t size);
-	~DataBuffer();
+	virtual ~DataBuffer();
 
 	size_t get_max_size() const;
 	size_t get_size() const;
@@ -26,24 +29,43 @@ public:
 	void insert(EM::Data data);
 	EM::Data get_data(uint number, size_t length);
 
-	EM::Data raw_read(size_t length);
-	void raw_move(size_t offset);
-
 	void init();
 	void clear();
 
-private:
+protected:
 	size_t size;
 	size_t end;
 	size_t current;
 
-	size_t raw_ptr;
+	bool full;
 
 	char *data;
 
 	uint index;
 
 	std::unordered_map<uint, size_t> indexes;
+};
+
+/**
+ * \class RawBuffer
+ */
+class RawBuffer : private DataBuffer
+{
+public:
+	RawBuffer(size_t size);
+
+	size_t get_max_size() const;
+	size_t get_size() const;
+
+	void write(EM::Data data);
+	EM::Data read(size_t length);
+	void move(size_t offset);
+
+	void init();
+	void clear();
+
+private:
+	size_t ptr;
 };
 
 #endif // DATABUFFER_H

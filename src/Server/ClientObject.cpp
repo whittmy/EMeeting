@@ -17,13 +17,14 @@ ClientQueue::ClientQueue(
 	fifo_low_watermark(fifo_low_watermark),
 	fifo_high_watermark(fifo_high_watermark),
 
-	current_size(0),
 	bytes_inserted(0),
 
 	recent_min(0),
 	recent_max(0),
 
 	nr(0),
+
+	state(State::Filling),
 
 	buffer(fifo_size)
 {
@@ -34,28 +35,33 @@ ClientQueue::ClientQueue(
 
 void ClientQueue::insert(EM::Data input, uint nr)
 {
-	if (get_size() + input.length > get_max_size() || nr <= this->nr) {
+	if (input.length > get_available_space_size() || nr <= this->nr || input.length == 0) {
 		std::cerr << "Package dropped!\n";
 		return;
 	}
-	buffer.insert(input);
+	buffer.write(input);
 
 	update_recent_data();
 
 	bytes_inserted += input.length;
-	current_size   += input.length;
+
+	if (get_size() >= fifo_high_watermark)
+		state = State::Active;
 
 	this->nr = nr;
 }
 
 EM::Data ClientQueue::get(size_t length)
 {
-	return buffer.raw_read(length);
+	return buffer.read(length);
 }
 
 void ClientQueue::move(size_t length)
 {
-	buffer.raw_move(length);
+	buffer.move(length);
+
+	if (get_size() <= fifo_low_watermark)
+		state = State::Filling;
 }
 
 bool ClientQueue::is_full() const
@@ -65,7 +71,6 @@ bool ClientQueue::is_full() const
 
 void ClientQueue::clear()
 {
-	current_size   = 0;
 	bytes_inserted = 0;
 	recent_min     = 0;
 	recent_max     = 0;
@@ -75,7 +80,7 @@ void ClientQueue::clear()
 
 size_t ClientQueue::get_size() const
 {
-	return current_size;
+	return buffer.get_size();
 }
 
 size_t ClientQueue::get_max_size() const
@@ -85,7 +90,7 @@ size_t ClientQueue::get_max_size() const
 
 size_t ClientQueue::get_available_space_size() const
 {
-	return fifo_high_watermark - get_size();
+	return get_max_size() - get_size();
 }
 
 size_t ClientQueue::get_bytes_inserted() const
@@ -115,12 +120,12 @@ uint ClientQueue::get_expected_nr() const
 
 bool ClientQueue::is_active() const
 {
-	return get_size() >= fifo_high_watermark;
+	return state == State::Active;
 }
 
 bool ClientQueue::is_filling() const
 {
-	return get_size() <= fifo_low_watermark;
+	return state == State::Filling;
 }
 
 void ClientQueue::update_recent_data()

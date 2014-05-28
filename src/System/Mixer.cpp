@@ -26,6 +26,4 @@ void Mixer::mixer(
 			sum = (uint32_t) std::numeric_limits<size_t>::max();
 		((data_t *) output_buffer)[i] = (data_t) sum;
 	}
-
-	std::cerr << "produced " << *output_size << " bytes\n";
 }

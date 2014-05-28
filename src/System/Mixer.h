@@ -17,7 +17,7 @@ public:
 		size_t consumed;
 	};
 
-	typedef uint16_t data_t;
+	typedef int16_t data_t;
 
 	static const int DATA_MS_SIZE = 176;
 

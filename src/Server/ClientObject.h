@@ -31,6 +31,9 @@ public:
 
 	uint get_expected_nr() const;
 
+	enum class State : uint8_t {Active, Filling};
+
+	State get_state() const;
 	bool is_active() const;
 	bool is_filling() const;
 
@@ -41,7 +44,6 @@ private:
 	size_t fifo_low_watermark;
 	size_t fifo_high_watermark;
 
-	size_t current_size;
 	size_t bytes_inserted;
 
 	size_t recent_min;
@@ -49,7 +51,9 @@ private:
 
 	uint nr;
 
-	DataBuffer buffer;
+	State state;
+
+	RawBuffer buffer;
 };
 
 class ClientObject

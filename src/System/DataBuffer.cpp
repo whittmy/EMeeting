@@ -25,6 +25,10 @@ size_t DataBuffer::get_max_size() const
 
 size_t DataBuffer::get_size() const
 {
+	if (full)
+		return get_max_size();
+	if (indexes.find(index) == indexes.end())
+		return current;
 	if (indexes.at(index) > current)
 		return end - indexes.at(index) + current;
 	else
@@ -42,10 +46,16 @@ void DataBuffer::insert(EM::Data data)
 		end = current;
 		current = 0;
 	}
-	std::cerr << "current: " << current << ", length: " << data.length << ", size: " << size << "\n";
+
+	if (data.length == get_max_size() - get_size())
+		full = true;
+
 	std::memcpy(this->data + current, data.data, data.length);
 
 	current += data.length;
+
+	if (current == end || current == get_max_size())
+		current = 0;
 }
 
 EM::Data DataBuffer::get_data(uint number, size_t length)
@@ -54,6 +64,9 @@ EM::Data DataBuffer::get_data(uint number, size_t length)
 
 	if (indexes.find(number - INDEX_MEMORY) != indexes.end())
 		indexes.erase(indexes.find(number - INDEX_MEMORY));
+
+	if (length > 0)
+		full = false;
 
 	/** number cannot(!) be greater than index + 1 */
 	if (index > number)
@@ -78,38 +91,93 @@ EM::Data DataBuffer::get_data(uint number, size_t length)
 	}
 }
 
-EM::Data DataBuffer::raw_read(size_t length)
-{
-	size_t last_index;
-
-	if (current > raw_ptr)
-		last_index = current;
-	else
-		last_index = end;
-
-	if (last_index - raw_ptr < length)
-		return EM::Data(data + raw_ptr, last_index - raw_ptr);
-	else
-		return EM::Data(data + raw_ptr, length);
-}
-
-void DataBuffer::raw_move(size_t offset)
-{
-	raw_ptr = (raw_ptr + offset) % end;
-}
-
 void DataBuffer::init()
 {
 	data = new char[size];
 	indexes.clear();
 	current = 0;
-	raw_ptr = 0;
 	index = 0;
 	indexes[index] = 0;
 	end = size;
+	full = false;
 }
 
 void DataBuffer::clear()
 {
 	delete[] data;
+}
+
+/**
+ * \class RawBuffer
+ */
+
+RawBuffer::RawBuffer(size_t size) :
+	DataBuffer(size)
+{
+	init();
+}
+
+size_t RawBuffer::get_max_size() const
+{
+	return DataBuffer::get_max_size();
+}
+
+size_t RawBuffer::get_size() const
+{
+	if (full)
+		return get_max_size();
+	return (current >= ptr)
+		? (current - ptr)
+		: (end - ptr + current);
+}
+
+void RawBuffer::write(EM::Data data)
+{
+	DataBuffer::insert(data);
+}
+
+EM::Data RawBuffer::read(size_t length)
+{
+	size_t last_index;
+
+	if (current > ptr)
+		last_index = current;
+	else
+		last_index = end;
+
+	if (last_index - ptr < length)
+		return EM::Data(data + ptr, last_index - ptr);
+	else
+		return EM::Data(data + ptr, length);
+}
+
+void RawBuffer::move(size_t offset)
+{
+	std::cerr << "offset: " << offset << "\n";
+	bool a = false;
+	if (offset == get_size()) {
+		a = true;
+		std::cerr << "ptr: " << ptr << ", current: " << current << ", getsize: " << get_size() << "\n";
+	}
+
+	if (offset > 0)
+		full = false;
+	ptr += offset;
+	if (ptr >= end) {
+		ptr %= end;
+		end = get_max_size();
+	}
+	if (a)
+		std::cerr << "ptr: " << ptr << ", current: " << current << ", getsize: " << get_size() << "\n";
+}
+
+void RawBuffer::init()
+{
+	ptr = 0;
+	DataBuffer::init();
+}
+
+void RawBuffer::clear()
+{
+	DataBuffer::clear();
 }
