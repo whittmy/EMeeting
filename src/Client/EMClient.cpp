@@ -253,7 +253,7 @@ void EMClient::server_interaction_routine()
 	boost::array<char, BUFFER_SIZE> buf;
 
 	/** We send anything to get going */
-	send_data(std::string("INITIAL MESSAGE\n"), sent);
+	insert_input();
 
 	while (is_connected()) {
 		insert_input();
@@ -293,7 +293,7 @@ void EMClient::server_interaction_routine()
 
 				size_t index =
 					EM::Messages::get_first_endline_index(output_buffer);
-				out << output_buffer.substr(index + 1);
+// 				out << output_buffer.substr(index + 1);
 				std::cerr << "READ " << output_buffer.substr(0, index + 1);
 
 				if (nr > expected && nr - expected <= get_retransmit_limit()) {
@@ -317,19 +317,23 @@ void EMClient::insert_input()
 	std::string input;
 	while (input_buffer.size() < BUFFER_SIZE
 		&& std::getline(in, input))
-		input_buffer += input;
+		input_buffer += input + "\n";
 }
 
 void EMClient::manage_messages()
 {
-	if (acknowledged < sent && acknowledged != 0) {
+	if (acknowledged < sent) {
+		std::cerr << "Retransmitting\n";
 		for (uint i = acknowledged; i < sent; ++i)
 			if (messages.find(i) != messages.end())
 				send_data(messages[i], i);
 	} else if (window_size >= MIN_DATA_SIZE) {
 		size_t length  = std::min(input_buffer.size(), window_size);
+		while (length % sizeof(Mixer::data_t) != 0)
+			--length;
 		messages[sent] = input_buffer.substr(0, length);
 		input_buffer   = input_buffer.substr(length);
+		out << messages[sent];
 		send_data(messages[sent], sent);
 		++sent;
 		window_size -= length;
