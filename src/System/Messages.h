@@ -61,7 +61,9 @@ namespace EM {
 
 		bool read_ack(const std::string &message, uint &ack, size_t &win);
 
-		size_t get_first_endline_index(const std::string &str);
+		bool read_upload(const std::string &message, uint &nr);
+
+		bool read_retransmit(const std::string &message, uint &nr);
 	}
 }
 

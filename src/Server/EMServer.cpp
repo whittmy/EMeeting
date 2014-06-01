@@ -25,9 +25,7 @@ EMServer::EMServer() :
 
 	io_service(),
 
-	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port)),
-
-	mixer_buffer(BUFFER_SIZE * EXPECTED_CLIENTS_LIMIT)
+	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port))
 {}
 
 EMServer::~EMServer()
@@ -123,7 +121,7 @@ uint EMServer::get_next_cid()
 			if (c.second->get_cid() == cid)
 				used = true;
 		clients_mutex.unlock();
-		if (!used)
+		if (!used && cid != 0)
 			return cid;
 	}
 	std::cerr << "get_next_cid: error\n";
@@ -226,16 +224,24 @@ uint EMServer::get_active_clients_number() const
 
 uint EMServer::get_cid_from_address(const std::string &address)
 {
-	for (auto p : clients)
-		if (p.second->get_name().substr(0, address.size()) == address)
-			return p.first;
+	clients_mutex.lock();
+	for (auto p : clients) {
+		if (p.second->get_name().substr(0, address.size()) == address) {
+			clients_mutex.unlock();
+			if (!p.second->is_connected())
+				return 0;
+			else
+				return p.first;
+		}
+	}
+	clients_mutex.unlock();
 	return 0;
 }
 
 void EMServer::udp_receive_routine()
 {
 	udp_socket.async_receive_from(
-		boost::asio::buffer(buffer, BUFFER_SIZE), udp_endpoint,
+		boost::asio::buffer(input_buffer), udp_endpoint,
 		boost::bind(&EMServer::handle_receive, this,
 			boost::asio::placeholders::error,
 			boost::asio::placeholders::bytes_transferred));
@@ -246,57 +252,71 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 	if (ec || bytes_received == 0) {
 		std::cerr << "server error in udp\n";
 	} else {
-		EM::Messages::Type type = EM::Messages::get_type(buffer);
+		std::string message(input_buffer.begin(), input_buffer.begin() + bytes_received);
+		EM::Messages::Type type = EM::Messages::get_type(message);
 		switch (type) {
 			case EM::Messages::Type::Client: {
 				uint cid = 0;
-				if (std::sscanf(buffer, EM::Messages::Client.c_str(), &cid) == 1)
-					std::cerr << "READ " << buffer;
-				else
+				if (EM::Messages::read_client(message, cid)) {
+					std::cerr << "READ " << message;
+					clients[cid]->set_udp_endpoint(udp_endpoint);
+				} else {
 					std::cerr << "READ invalid CLIENT datagram.\n";
-				clients[cid]->set_udp_endpoint(udp_endpoint);
+				}
 				break;
 			}
 			case EM::Messages::Type::Upload: {
-				uint cid = 0, nr = 0;
-				size_t index;
-				if (std::sscanf(buffer, EM::Messages::Upload.c_str(), &nr)
-					== 1) {
-					cid = get_cid_from_address(
-						udp_endpoint.address().to_string());
+				uint nr = 0;
+				uint cid = get_cid_from_address(
+					udp_endpoint.address().to_string());
+				if (EM::Messages::read_upload(message, nr) && cid != 0) {
+					size_t index =
+						message.find('\n');
 
-					for (index = 0; index < std::strlen(buffer) &&
-						buffer[index] != '\n'; ++index) {}
-					++index;
+					if (index == message.size()) {
+						std::cerr << "READ invalid UPLOAD datagram.\n";
+						break;
+					}
 
 					std::cerr << "READ UPLOAD " << nr << " from " << cid
-						<< " (" << bytes_received - index << ")\n";
-
-					EM::Data data;
-					data.data = new char[bytes_received - index];
-					std::memcpy(data.data, buffer + index,
-						bytes_received - index);
-					data.length = bytes_received - index;
-
-// 					std::cout << std::string(data.data, data.length);
+						<< " (" << bytes_received - index - 1 << ")\n";
 
 					ClientQueue &queue = clients[cid]->get_queue();
-					queue.insert(data, nr);
-					send_ack(nr, queue.get_available_space_size());
+					if (queue.insert(message.substr(index + 1), nr))
+						send_ack(queue.get_expected_nr(),
+							queue.get_available_space_size());
+					else
+						std::cerr << "READ invalid UPLOAD datagram.\n";
 				} else {
 					std::cerr << "READ invalid UPLOAD datagram.\n";
 				}
 				break;
 			}
 			case EM::Messages::Type::Retransmit: {
-				std::cerr << "READ " << buffer;
+				uint nr;
+				uint cid = get_cid_from_address(
+					udp_endpoint.address().to_string());
+				if (EM::Messages::read_retransmit(message, nr) && cid != 0) {
+					std::cerr << "READ " << message;
+					if (current_nr - nr <= get_buffer_length()) {
+						for (uint i = nr; i < current_nr; ++i) {
+							ClientQueue q = clients[cid]->get_queue();
+							send_data(cid, i,
+								q.get_expected_nr(),
+								q.get_available_space_size(),
+								messages[i]);
+						}
+					}
+				} else {
+					std::cerr << "READ invalid RETRANSMIT datagram.\n";
+				}
 				break;
 			}
 			case EM::Messages::Type::KeepAlive: {
 				break;
 			}
 			default: {
-				std::cerr << "READ Unrecognized datagram: " << buffer << " ("
+				std::cerr << "READ Unrecognized datagram: " << message << " ("
 					<< bytes_received << ")\n";
 			}
 		}
@@ -306,43 +326,44 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 
 void EMServer::send_ack(uint nr, size_t win)
 {
-	char message[EM::Messages::LENGTH];
-	std::sprintf(message, EM::Messages::Ack.c_str(), nr + 1, win);
+	std::string message(EM::Messages::LENGTH, ' ');
+	std::sprintf(&message[0], EM::Messages::Ack.c_str(), nr, win);
+	message = message.substr(0, message.find("\n") + 1);
 
 	std::cerr << "SEND " << message;
 
 	udp_socket.async_send_to(
-		boost::asio::buffer(message, std::strlen(message)), udp_endpoint,
-			[this](const boost::system::error_code &ec, size_t bytes_received)
-			{
-				if (ec)
-					std::cerr << "Sending ACK failed.\n";
-			}
-		);
+		boost::asio::buffer(message), udp_endpoint,
+		[this](const boost::system::error_code &ec, size_t bytes_received)
+		{
+			if (ec)
+				std::cerr << "SEND ACK failed.\n";
+		}
+	);
 }
 
-void EMServer::send_data(uint cid, uint nr, uint ack, size_t win, EM::Data data)
+void EMServer::send_data(uint cid, uint nr, uint ack, size_t win, const std::string &data)
 {
 	udp_endpoint = clients[cid]->get_udp_endpoint();
 
-	char message[EM::Messages::LENGTH + BUFFER_SIZE];
-	std::sprintf(message, EM::Messages::Data.c_str(), nr, ack, win);
-	size_t message_length = std::strlen(message);
+	std::string message(BUFFER_SIZE, ' ');
+	std::sprintf(&message[0], EM::Messages::Data.c_str(), nr, ack, win);
+	message = message.substr(0, message.find("\n") + 1);
 
 	std::cerr << "SEND " << message;
 
-	std::memcpy(message + message_length, data.data, data.length);
+	message += data;
 
 	boost::system::error_code ec;
 
 	udp_socket.async_send_to(
-		boost::asio::buffer(message, message_length + data.length), udp_endpoint,
-			[this](const boost::system::error_code &ec, size_t bytes_received)
-			{
-				if (ec)
-					std::cerr << "Sending DATA failed.\n";
-			}
-		);
+		boost::asio::buffer(message), udp_endpoint,
+		[this](const boost::system::error_code &ec, size_t bytes_received)
+		{
+			if (ec)
+				std::cerr << "Sending DATA failed.\n";
+		}
+	);
  }
 
 void EMServer::mixer_routine()
@@ -356,40 +377,40 @@ void EMServer::mixer_routine()
 		size_t data_length = get_tx_interval() * Mixer::DATA_MS_SIZE;;
 		char data[data_length];
 
+		/** Collect the data from the queues */
 		size_t active_client = 0;
 		for (auto p : clients) {
 			ClientObject *client = p.second;
 
 			if (client->is_active()) {
 				client_number[active_client] = client->get_cid();
-				EM::Data input_data = client->get_queue().get(data_length);
+				std::string input_data = client->get_queue().get(data_length);
 
-				inputs[active_client].data   = input_data.data;
-				inputs[active_client].length = input_data.length;
+				inputs[active_client].data   = &input_data[0];
+				inputs[active_client].length = input_data.length();
 			}
 		}
 
+		/** Mix it */
 		Mixer::mixer(inputs, get_active_clients_number(), data, &data_length,
 			get_tx_interval());
 
-		for (size_t i = 0; i < get_active_clients_number(); ++i) {
-			std::cerr << "consumed: " << inputs[i].consumed << "\n";
-			std::cerr << "clients queue.size = " << clients[client_number[i]]->get_queue().get_size() << "\n";
+		for (size_t i = 0; i < get_active_clients_number(); ++i)
 			clients[client_number[i]]->get_queue().move(inputs[i].consumed);
-			std::cerr << "clients queue.size = " << clients[client_number[i]]->get_queue().get_size() << "\n";
-		}
 
-		mixer_buffer.insert({data, data_length});
+		/** Add the message to the sent list and erase the old one */
+		messages[current_nr] = std::string(data, data_length);
+		if (messages.find(current_nr - get_buffer_length()) != messages.end())
+			messages.erase(messages.find(current_nr - get_buffer_length()));
 
-		EM::Data data_to_send =
-			mixer_buffer.get_data(mixer_buffer.get_index(), data_length);
-
+		/** Iterate through the clients and send them mixed data */
 		for (auto p : clients)
 			if (p.second->is_connected())
-				send_data(p.second->get_cid(), mixer_buffer.get_index(),
+				send_data(p.second->get_cid(), current_nr,
 					p.second->get_queue().get_expected_nr(),
 					p.second->get_queue().get_available_space_size(),
-					data_to_send);
+					messages[current_nr]);
+		++current_nr;
 	}
 
 	timer.expires_from_now(boost::posix_time::milliseconds(get_tx_interval()));

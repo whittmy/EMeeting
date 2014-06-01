@@ -24,44 +24,43 @@ ClientQueue::ClientQueue(
 
 	nr(0),
 
-	state(State::Filling),
-
-	buffer(fifo_size)
+	state(State::Filling)
 {
 	assert(fifo_size >= fifo_high_watermark);
 	assert(fifo_high_watermark >= fifo_low_watermark);
 	assert(fifo_size > 0);
 }
 
-void ClientQueue::insert(EM::Data input, uint nr)
+bool ClientQueue::insert(const std::string &input, uint nr)
 {
-	if (input.length > get_available_space_size() || nr <= this->nr || input.length == 0) {
-		std::cerr << "Package dropped!\n";
-		return;
-	}
-	buffer.write(input);
+	if (input.length() > get_available_space_size()
+		|| (nr <= this->nr && nr > 0) || input.length() == 0)
+		return false;
 
+	buffer += input;
 	update_recent_data();
-
-	bytes_inserted += input.length;
-
+	bytes_inserted += input.length();
 	if (get_size() >= fifo_high_watermark)
 		state = State::Active;
-
 	this->nr = nr;
+
+	return true;
 }
 
-EM::Data ClientQueue::get(size_t length)
+std::string ClientQueue::get(size_t length)
 {
-	return buffer.read(length);
+	std::string data = buffer.substr(0, length);
+	return data;
 }
 
-void ClientQueue::move(size_t length)
+bool ClientQueue::move(size_t length)
 {
-	buffer.move(length);
-
+	if (length > buffer.size())
+		return false;
+	buffer = buffer.substr(length);
 	if (get_size() <= fifo_low_watermark)
 		state = State::Filling;
+	return true;
 }
 
 bool ClientQueue::is_full() const
@@ -75,12 +74,11 @@ void ClientQueue::clear()
 	recent_min     = 0;
 	recent_max     = 0;
 	buffer.clear();
-	buffer.init();
 }
 
 size_t ClientQueue::get_size() const
 {
-	return buffer.get_size();
+	return buffer.size();
 }
 
 size_t ClientQueue::get_max_size() const
@@ -116,6 +114,11 @@ void ClientQueue::reset_recent_data()
 uint ClientQueue::get_expected_nr() const
 {
 	return nr + 1;
+}
+
+ClientQueue::State ClientQueue::get_state() const
+{
+	return state;
 }
 
 bool ClientQueue::is_active() const

@@ -2,6 +2,7 @@
 #define EMSERVER_H
 
 #include <queue>
+#include <boost/array.hpp>
 #include <boost/asio.hpp>
 #include <mutex>
 #include <sys/types.h>
@@ -55,7 +56,7 @@ private:
 	void udp_receive_routine();
 	void handle_receive(const boost::system::error_code &ec, size_t bytes_received);
 	void send_ack(uint nr, size_t win);
-	void send_data(uint cid, uint nr, uint ack, size_t win, EM::Data data);
+	void send_data(uint cid, uint nr, uint ack, size_t win, const std::string &data);
 
 	void mixer_routine();
 
@@ -75,15 +76,19 @@ private:
 	boost::asio::io_service io_service;
 	boost::asio::ip::tcp::acceptor *tcp_acceptor;
 
-	boost::asio::ip::udp::socket udp_socket;
+	std::mutex udp_socket_mutex;
+	boost::asio::ip::udp::socket   udp_socket;
 	boost::asio::ip::udp::endpoint udp_endpoint;
 
 	static const size_t BUFFER_SIZE            = 65536;
 	static const size_t EXPECTED_CLIENTS_LIMIT = 16;
 
-	char buffer[BUFFER_SIZE];
+	size_t get_window_size() const;
 
-	DataBuffer mixer_buffer;
+	uint current_nr;
+	std::unordered_map<uint, std::string> messages;
+
+	boost::array<char, BUFFER_SIZE> input_buffer;
 };
 
 #endif // EMSERVER_H

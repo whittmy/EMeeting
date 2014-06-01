@@ -5,7 +5,6 @@
 #include <string>
 
 #include "Server/TcpConnection.h"
-#include "System/DataBuffer.h"
 #include "System/Mixer.h"
 
 class ClientQueue
@@ -13,11 +12,10 @@ class ClientQueue
 public:
 	ClientQueue(size_t fifo_size, size_t fifo_low_watermark, size_t fifo_high_watermark);
 
-	void insert(EM::Data data, uint nr);
-	EM::Data get(size_t length);
-	void move(size_t length);
+	bool insert(const std::string &data, uint nr);
+	std::string get(size_t length);
+	bool move(size_t length);
 	bool is_full() const;
-
 	void clear();
 
 	size_t get_size() const;
@@ -53,7 +51,7 @@ private:
 
 	State state;
 
-	RawBuffer buffer;
+	std::string buffer;
 };
 
 class ClientObject

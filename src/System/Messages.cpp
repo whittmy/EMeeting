@@ -60,10 +60,30 @@ bool EM::Messages::read_ack(const std::string &message, uint &ack, size_t &win)
 	return !ss.bad();
 }
 
-size_t EM::Messages::get_first_endline_index(const std::string &str)
+bool EM::Messages::read_upload(const std::string &message, uint &nr)
 {
-	size_t index = 0;
-	while (index < str.size() && str[index] != '\n')
-		++index;
-	return index;
+	std::string s;
+	std::stringstream ss(message);
+
+	ss >> s;
+	if (s != Headers::Upload)
+		return false;
+
+	ss >> nr;
+
+	return !ss.bad();
+}
+
+bool EM::Messages::read_retransmit(const std::string &message, uint &nr)
+{
+	std::string s;
+	std::stringstream ss(message);
+
+	ss >> s;
+	if (s != Headers::Upload)
+		return false;
+
+	ss >> nr;
+
+	return !ss.bad();
 }
