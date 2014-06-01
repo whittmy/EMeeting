@@ -1,6 +1,7 @@
 #include <limits>
 
-#include "System/Mixer.h"
+#include "Server/Mixer.h"
+#include "System/Utils.h"
 
 void Mixer::mixer(
 	Mixer::MixerInput *inputs,
@@ -13,17 +14,17 @@ void Mixer::mixer(
 		inputs[in].consumed = 0;
 
 	/** This isn't entirely my idea of mixer, but it is clever */
-	for (size_t i = 0; i < *output_size / sizeof(data_t); i += queues_number) {
+	for (size_t i = 0; i < *output_size / sizeof(EM::data_t); i += queues_number) {
 		uint32_t sum = 0;
 		for (size_t in = 0; in < queues_number; ++in) {
-			if (inputs[in].consumed + sizeof(data_t) <= inputs[in].length) {
-				sum += ((data_t *) inputs[in].data)[i];
-				inputs[in].consumed += sizeof(data_t);
+			if (inputs[in].consumed + sizeof(EM::data_t) <= inputs[in].length) {
+				sum += ((EM::data_t *) inputs[in].data)[i];
+				inputs[in].consumed += sizeof(EM::data_t);
 			}
 		}
 
 		if (sum > (uint32_t) std::numeric_limits<size_t>::max())
 			sum = (uint32_t) std::numeric_limits<size_t>::max();
-		((data_t *) output_buffer)[i] = (data_t) sum;
+		((EM::data_t *) output_buffer)[i] = (EM::data_t) sum;
 	}
 }

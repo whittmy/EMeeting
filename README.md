@@ -10,11 +10,9 @@ Includes both server and client implementation.
 
 CMake 2.8
 gcc 4.8.2
+boost 1.53
 
 ### Installation
 
-Create and enter directory 'build' in the main directory.
-
-_cmake .. && make && make install_
-
-This should create executables 'client' and 'server' in 'build/bin'.
+Execute _make_ in the main directory or create directory build and _cmake .. && make_ from there.
+This should create binaries 'client' and 'server' in build/bin.

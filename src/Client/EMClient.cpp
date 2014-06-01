@@ -334,7 +334,7 @@ void EMClient::manage_messages()
 				send_data(messages[i], i);
 	} else if (window_size >= MIN_DATA_SIZE && input_buffer.size() >= MIN_DATA_SIZE) {
 		size_t length = std::min(input_buffer.size(), window_size);
-		while (length % sizeof(Mixer::data_t) != 0)
+		while (length % sizeof(EM::data_t) != 0)
 			--length;
 		messages[sent] = input_buffer.substr(0, length);
 		input_buffer   = input_buffer.substr(length);

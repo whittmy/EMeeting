@@ -5,7 +5,6 @@
 #include <string>
 
 #include "Server/TcpConnection.h"
-#include "System/Mixer.h"
 
 class ClientQueue
 {

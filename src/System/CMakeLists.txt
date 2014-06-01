@@ -3,7 +3,6 @@ set (EMSystem_SRCS
 	ArgsManager.cpp
 	Error.cpp
 	Messages.cpp
-	Mixer.cpp
 	SignalHandler.cpp
 )
 

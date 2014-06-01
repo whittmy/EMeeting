@@ -15,8 +15,6 @@ public:
 		size_t consumed;
 	};
 
-	typedef int16_t data_t;
-
 	static const int DATA_MS_SIZE = 176;
 
 	static void mixer(

@@ -7,8 +7,6 @@
 #include <string>
 #include <unordered_map>
 
-#include "System/Mixer.h"
-
 class EMClient
 {
 public:

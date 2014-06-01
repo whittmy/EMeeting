@@ -2,6 +2,7 @@ set (EMServer_SRCS
 	ClientObject.cpp
 	EMServer.cpp
 	main.cpp
+	Mixer.cpp
 	TcpConnection.cpp
 )
 
