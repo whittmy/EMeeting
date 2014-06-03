@@ -51,12 +51,18 @@ private:
 	uint get_connected_clients_number() const;
 	uint get_active_clients_number() const;
 
+	std::string get_address_from_endpoint(boost::asio::ip::udp::endpoint &endpoint) const;
 	uint get_cid_from_address(const std::string &address);
 
 	void udp_receive_routine();
 	void handle_receive(const boost::system::error_code &ec, size_t bytes_received);
-	void send_ack(uint nr, size_t win);
-	void send_data(uint cid, uint nr, uint ack, size_t win, const std::string &data);
+	void send_ack(boost::asio::ip::udp::endpoint &endpoint, uint nr, size_t win);
+	void send_data(
+		boost::asio::ip::udp::endpoint endpoint,
+		uint cid,
+		uint nr, 
+		uint ack, 
+		size_t win, const std::string &data);
 
 	void mixer_routine();
 

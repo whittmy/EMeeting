@@ -168,10 +168,11 @@ ClientQueue &ClientObject::get_queue()
 
 std::string ClientObject::get_name() const
 {
-	if (connection == nullptr)
-		return std::string("unknown");
-	else
-		return connection->get_name();
+	return udp_endpoint.address().to_string() + ":" + std::to_string(udp_endpoint.port());
+// 	if (connection == nullptr)
+// 		return std::string("unknown");
+// 	else
+// 		return connection->get_name();
 }
 
 void ClientObject::set_connection(TcpConnection::Pointer connection)

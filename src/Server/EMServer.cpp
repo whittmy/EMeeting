@@ -26,7 +26,11 @@ EMServer::EMServer() :
 	io_service(),
 
 	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port))
-{}
+{
+	ClientObject *dummy = new ClientObject(0, get_fifo_size(), get_fifo_low_watermark(),
+		get_fifo_high_watermark());
+	clients[0] = dummy;
+}
 
 EMServer::~EMServer()
 {
@@ -137,7 +141,6 @@ void EMServer::add_client(uint cid)
 			get_fifo_low_watermark(),
 			get_fifo_high_watermark());
 	clients_mutex.unlock();
-	std::cerr << "Added client: " << cid << "\n";
 }
 
 void EMServer::on_connection_established(uint cid, Connection *connection)
@@ -194,6 +197,7 @@ void EMServer::send_info_routine()
 			for (auto p : clients)
 				if (p.second->is_connected())
 					report += p.second->get_report();
+			std::cerr << report;
 			for (auto p : clients)
 				if (p.second->is_connected())
 					p.second->get_connection()->send_info(report);
@@ -222,19 +226,28 @@ uint EMServer::get_active_clients_number() const
 	return cnt;
 }
 
+std::string EMServer::get_address_from_endpoint(boost::asio::ip::udp::endpoint &endpoint) const
+{
+	return endpoint.address().to_string() + ":" + std::to_string(endpoint.port());
+}
+
 uint EMServer::get_cid_from_address(const std::string &address)
 {
 	clients_mutex.lock();
 	for (auto p : clients) {
 		if (p.second->get_name().substr(0, address.size()) == address) {
 			clients_mutex.unlock();
-			if (!p.second->is_connected())
+			if (!p.second->is_connected()) {
+				std::cerr << "client not connected\n";
 				return 0;
-			else
+			} else {
+				std::cerr << "returning " << address << "\n";
 				return p.first;
+			}
 		}
 	}
 	clients_mutex.unlock();
+	std::cerr << "no such client\n";
 	return 0;
 }
 
@@ -258,23 +271,28 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 			case EM::Messages::Type::Client: {
 				uint cid = 0;
 				if (EM::Messages::read_client(message, cid)) {
-					std::cerr << "READ " << message;
+					std::cerr << "READ " << message << " from " 
+						<< get_address_from_endpoint(udp_endpoint) << ".\n";;
 					clients[cid]->set_udp_endpoint(udp_endpoint);
+					std::cerr << "Added client: " << clients[cid]->get_name() << "\n";
 				} else {
-					std::cerr << "READ invalid CLIENT datagram.\n";
+					std::cerr << "READ invalid CLIENT datagram from " 
+						<< get_address_from_endpoint(udp_endpoint) << ".\n";
 				}
 				break;
 			}
 			case EM::Messages::Type::Upload: {
 				uint nr = 0;
-				uint cid = get_cid_from_address(
-					udp_endpoint.address().to_string());
+				uint cid = 
+					get_cid_from_address(
+						get_address_from_endpoint(udp_endpoint));
 				if (EM::Messages::read_upload(message, nr) && cid != 0) {
 					size_t index =
 						message.find('\n');
 
 					if (index == message.size()) {
-						std::cerr << "READ invalid UPLOAD datagram.\n";
+						std::cerr << "READ invalid UPLOAD datagram from " 
+							<< clients[cid]->get_name() << ".\n";
 						break;
 					}
 
@@ -283,25 +301,29 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 
 					ClientQueue &queue = clients[cid]->get_queue();
 					if (queue.insert(message.substr(index + 1), nr))
-						send_ack(queue.get_expected_nr(),
+						send_ack(udp_endpoint,
+							queue.get_expected_nr(),
 							queue.get_available_space_size());
 					else
-						std::cerr << "READ invalid UPLOAD datagram.\n";
+						std::cerr << "READ invalid UPLOAD datagram from " 
+							<< clients[cid]->get_name() << ".\n";
 				} else {
-					std::cerr << "READ invalid UPLOAD datagram.\n";
+					std::cerr << "READ invalid UPLOAD datagram from " 
+						<< clients[cid]->get_name() << ".\n";
 				}
 				break;
 			}
 			case EM::Messages::Type::Retransmit: {
 				uint nr;
-				uint cid = get_cid_from_address(
-					udp_endpoint.address().to_string());
+				uint cid = 
+					get_cid_from_address(
+						get_address_from_endpoint(udp_endpoint));
 				if (EM::Messages::read_retransmit(message, nr) && cid != 0) {
-					std::cerr << "READ " << message;
+// 					std::cerr << "READ " << message;
 					if (current_nr - nr <= get_buffer_length()) {
 						for (uint i = nr; i < current_nr; ++i) {
 							ClientQueue q = clients[cid]->get_queue();
-							send_data(cid, i,
+							send_data(udp_endpoint, cid, i,
 								q.get_expected_nr(),
 								q.get_available_space_size(),
 								messages[i]);
@@ -324,16 +346,16 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 	udp_receive_routine();
 }
 
-void EMServer::send_ack(uint nr, size_t win)
+void EMServer::send_ack(boost::asio::ip::udp::endpoint &endpoint, uint nr, size_t win)
 {
 	std::string message(EM::Messages::LENGTH, ' ');
 	std::sprintf(&message[0], EM::Messages::Ack.c_str(), nr, win);
 	message = message.substr(0, message.find("\n") + 1);
 
-	std::cerr << "SEND " << message;
+	std::cerr << "SEND " << message << " to " << get_address_from_endpoint(endpoint) << "\n";
 
 	udp_socket.async_send_to(
-		boost::asio::buffer(message), udp_endpoint,
+		boost::asio::buffer(message), endpoint,
 		[this](const boost::system::error_code &ec, size_t bytes_received)
 		{
 			if (ec)
@@ -342,22 +364,26 @@ void EMServer::send_ack(uint nr, size_t win)
 	);
 }
 
-void EMServer::send_data(uint cid, uint nr, uint ack, size_t win, const std::string &data)
+void EMServer::send_data(
+	boost::asio::ip::udp::endpoint endpoint, 
+	uint cid, 
+	uint nr, 
+	uint ack,
+	size_t win, 
+	const std::string &data)
 {
-	udp_endpoint = clients[cid]->get_udp_endpoint();
-
 	std::string message(BUFFER_SIZE, ' ');
 	std::sprintf(&message[0], EM::Messages::Data.c_str(), nr, ack, win);
 	message = message.substr(0, message.find("\n") + 1);
 
-	std::cerr << "SEND " << message;
+	std::cerr << "SEND " << message << " to " << get_address_from_endpoint(endpoint) << "\n";
 
 	message += data;
 
 	boost::system::error_code ec;
 
 	udp_socket.async_send_to(
-		boost::asio::buffer(message), udp_endpoint,
+		boost::asio::buffer(message), endpoint,
 		[this](const boost::system::error_code &ec, size_t bytes_received)
 		{
 			if (ec)
@@ -406,7 +432,8 @@ void EMServer::mixer_routine()
 		/** Iterate through the clients and send them mixed data */
 		for (auto p : clients)
 			if (p.second->is_connected())
-				send_data(p.second->get_cid(), current_nr,
+				send_data(p.second->get_udp_endpoint(),
+					p.second->get_cid(), current_nr,
 					p.second->get_queue().get_expected_nr(),
 					p.second->get_queue().get_available_space_size(),
 					messages[current_nr]);
