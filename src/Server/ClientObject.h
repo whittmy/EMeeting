@@ -73,7 +73,7 @@ public:
 	TcpConnection::Pointer get_connection();
 	bool is_connected() const;
 
-	std::string get_report() const;
+	std::string get_report();
 
 	void set_udp_endpoint(boost::asio::ip::udp::endpoint udp_endpoint);
 	boost::asio::ip::udp::endpoint get_udp_endpoint();

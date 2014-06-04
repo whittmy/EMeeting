@@ -279,8 +279,8 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 						message.find('\n');
 
 					if (index == message.size()) {
-						info() << "READ invalid UPLOAD datagram from "
-							<< clients[cid]->get_name() << ".\n";
+						info() << "READ empty UPLOAD datagram from "
+							<< clients[cid]->get_name() << "\n";
 						break;
 					}
 
@@ -294,8 +294,8 @@ void EMServer::handle_receive(const boost::system::error_code &ec, size_t bytes_
 							queue.get_expected_nr(),
 							queue.get_available_space_size());
 					else
-						info() << "READ invalid UPLOAD datagram from "
-							<< clients[cid]->get_name() << ".\n";
+						log() << "READ invalid UPLOAD datagram from "
+							<< clients[cid]->get_name() << "\n";
 				} else {
 					info() << "READ invalid UPLOAD datagram from "
 						<< clients[cid]->get_name() << ".\n";
@@ -396,7 +396,7 @@ void EMServer::mixer_routine()
 	mixer_timer.expires_from_now(boost::posix_time::milliseconds(get_tx_interval()));
 	mixer_timer.async_wait(boost::bind(&EMServer::mixer_routine, this));
 
-	size_t active_clients_number = get_active_clients_number();//std::min(get_active_clients_number(), (uint) BUFFER_SIZE / (get_tx_interval() * Mixer::DATA_MS_SIZE));
+	size_t active_clients_number = get_active_clients_number();
 	Mixer::MixerInput inputs[active_clients_number];
 	uint client_number[active_clients_number];
 

@@ -187,13 +187,15 @@ bool ClientObject::is_connected() const
 		get_name() != "00:00:00:00:00:00:0";
 }
 
-std::string ClientObject::get_report() const
+std::string ClientObject::get_report()
 {
 	static const size_t BUFFER_SIZE = 128;
 	char report[BUFFER_SIZE];
 
 	std::sprintf(report, EM::Messages::List.c_str(), get_name().c_str(), queue.get_size(),
 		queue.get_max_size(), queue.get_min_recent_bytes(), queue.get_max_recent_bytes());
+
+	queue.reset_recent_data();
 
 	return std::string(report);
 }
