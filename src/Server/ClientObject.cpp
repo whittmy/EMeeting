@@ -169,10 +169,6 @@ ClientQueue &ClientObject::get_queue()
 std::string ClientObject::get_name() const
 {
 	return udp_endpoint.address().to_string() + ":" + std::to_string(udp_endpoint.port());
-// 	if (connection == nullptr)
-// 		return std::string("unknown");
-// 	else
-// 		return connection->get_name();
 }
 
 void ClientObject::set_connection(TcpConnection::Pointer connection)
@@ -187,7 +183,8 @@ TcpConnection::Pointer ClientObject::get_connection()
 
 bool ClientObject::is_connected() const
 {
-	return connection != nullptr;
+	return connection != nullptr && get_name() != "0.0.0.0:0" &&
+		get_name() != "00:00:00:00:00:00:0";
 }
 
 std::string ClientObject::get_report() const

@@ -7,6 +7,7 @@
 
 #include "Client/EMClient.h"
 #include "System/AbstractServer.h"
+#include "System/Logging.h"
 #include "System/Messages.h"
 #include "System/Utils.h"
 
@@ -65,7 +66,7 @@ void EMClient::start()
 {
 	io_service.run();
 
-	std::cerr << "Connecting with " << get_server_name() << " on port " << get_port() << "\n";
+	info() << "Connecting with " << get_server_name() << " on port " << get_port() << "\n";
 
 	boost::system::error_code error;
 	boost::array<char, EM::Messages::LENGTH> buf;
@@ -82,6 +83,8 @@ void EMClient::start()
 				std::thread (&EMClient::connect_udp, this).detach();
 			else
 				continue;
+
+			info() << "Connected!\n";
 
 			static const uint MAX_DELAY = 3;
 			uint delay = 0;
@@ -102,14 +105,14 @@ void EMClient::start()
 					received_message =
 						std::string(buf.begin(),
 							buf.begin() + bytes_read);
-					std::cerr << received_message;
+					info() << received_message;
 				}
 				timer.expires_from_now(
 					boost::posix_time::milliseconds(
 						AbstractServer::SEND_INFO_TIMEOUT_MS));
 				timer.wait();
 			}
-			std::cerr << "Disconnected!\n";
+			info() << "Disconnected!\n";
 		}
 		timer.expires_from_now(
 			boost::posix_time::seconds(CONNECTION_RETRY_TIME_SEC));
@@ -144,7 +147,7 @@ void EMClient::touch_connection()
 
 bool EMClient::connect_tcp()
 {
-	std::cerr << "Establishing connection... ";
+	log() << "Establishing connection... ";
 
 	boost::system::error_code error;
 
@@ -157,9 +160,7 @@ bool EMClient::connect_tcp()
 	boost::asio::connect(tcp_socket, endpoint_iterator, error);
 
 	if (error)
-		std::cerr << "unable to connect.\n";
-	else
-		std::cerr << "connected!\n";
+		log() << "unable to connect.\n";
 
 	return !error && read_init_message();
 }
@@ -169,7 +170,7 @@ bool EMClient::read_init_message()
 	boost::array<char, EM::Messages::LENGTH> buf;
 	boost::system::error_code error;
 
-	std::cerr << "Reading network initialization message... ";
+	log() << "Reading network initialization message... ";
 
 	size_t length = tcp_socket.read_some(boost::asio::buffer(buf), error);
 
@@ -183,7 +184,7 @@ bool EMClient::read_init_message()
 
 void EMClient::connect_udp()
 {
-	std::cerr << "Establishing UDP connection...\n";
+	log() << "Establishing UDP connection...\n";
 
 	std::string request(EM::Messages::LENGTH, '\0');
 	std::sprintf(&request[0], EM::Messages::Client.c_str(), cid);
@@ -209,7 +210,7 @@ void EMClient::connect_udp()
 		}
 	} while (error);
 
-	std::cerr << "UDP connected!\n";
+	log() << "UDP connected!\n";
 
 	touch_connection();
 
@@ -273,8 +274,7 @@ void EMClient::server_interaction_routine()
 				size_t win;
 				if (!EM::Messages::read_ack(output_buffer, ack, win))
 					break;
-				std::cerr << "READ "
-					<< output_buffer;
+				log() << "READ " << output_buffer;
 
 				acknowledged = ack;
 				window_size  = win;
@@ -295,11 +295,11 @@ void EMClient::server_interaction_routine()
 				size_t index =
 					output_buffer.find("\n");
 				if (index >= output_buffer.size()) {
-					std::cerr << "READ invalid DATA\n";
+					info() << "READ invalid DATA\n";
 					break;
 				}
 				out << output_buffer.substr(index + 1);
-				std::cerr << "READ " << output_buffer.substr(0, index + 1);
+				log() << "READ " << output_buffer.substr(0, index + 1);
 
 				if (nr > expected && nr - expected <= get_retransmit_limit()) {
 					ask_retransmit(expected);
@@ -328,7 +328,7 @@ void EMClient::insert_input()
 void EMClient::manage_messages()
 {
 	if (acknowledged < sent) {
-		std::cerr << "Retransmitting\n";
+		log() << "Retransmitting\n";
 		for (uint i = acknowledged; i < sent; ++i)
 			if (messages.find(i) != messages.end())
 				send_data(messages[i], i);
@@ -355,7 +355,7 @@ bool EMClient::ask_retransmit(uint number)
 
 	boost::system::error_code error;
 
-	std::cerr << "SEND " << message;
+	log() << "SEND " << message;
 
 	udp_socket.send_to(
 		boost::asio::buffer(message, std::strlen(message)), udp_endpoint,
@@ -372,7 +372,7 @@ bool EMClient::send_data(const std::string &data, uint number)
 	std::sprintf(&output[0] , EM::Messages::Upload.c_str(), number);
 	output = output.substr(0, output.find("\n") + 1);
 
-	std::cerr << "SEND (" << data.size() << ") " << output;
+	log() << "SEND (" << data.size() << ") " << output;
 
 	output += data;
 
@@ -383,7 +383,7 @@ bool EMClient::send_data(const std::string &data, uint number)
 			boost::asio::ip::udp::socket::message_flags(0), error);
 
 	if (error || bytes_sent < output.size()) {
-		std::cerr << "Unable to send data to server.\n";
+		warn() << "Unable to send data to server.\n";
 		return false;
 	}
 

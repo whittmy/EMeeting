@@ -3,6 +3,7 @@
 #include <boost/lexical_cast.hpp>
 
 #include "Server/TcpConnection.h"
+#include "System/Logging.h"
 #include "System/Messages.h"
 
 TcpConnection::~TcpConnection()
@@ -19,7 +20,7 @@ TcpConnection::Pointer TcpConnection::create(
 
 void TcpConnection::start()
 {
-	std::cerr << "Starting connection...\n";
+	log() << "Starting connection...\n";
 	char msg[EM::Messages::LENGTH];
 
 	cid = server->get_next_cid();
@@ -72,7 +73,7 @@ TcpConnection::TcpConnection(AbstractServer *server, boost::asio::io_service &io
 void TcpConnection::handle_connect(const boost::system::error_code &error, size_t size)
 {
 	if (error)
-		std::cerr << "handle_connect: error\n";
+		warn() << "handle_connect: error\n";
 	else
 		server->on_connection_established(cid, this);
 }

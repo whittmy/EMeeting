@@ -4,7 +4,6 @@
 #include <boost/asio.hpp>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 
 class Mixer
 {

@@ -44,6 +44,8 @@ public:
 	virtual void on_connection_lost(uint cid);
 
 private:
+	/** TCP */
+
 	void start_accept();
 	void handle_accept(TcpConnection::Pointer new_connection,
 	                   const boost::system::error_code &error);
@@ -51,18 +53,26 @@ private:
 	uint get_connected_clients_number() const;
 	uint get_active_clients_number() const;
 
+	/** UDP */
+
 	std::string get_address_from_endpoint(boost::asio::ip::udp::endpoint &endpoint) const;
 	uint get_cid_from_address(const std::string &address);
 
 	void udp_receive_routine();
 	void handle_receive(const boost::system::error_code &ec, size_t bytes_received);
-	void send_ack(boost::asio::ip::udp::endpoint &endpoint, uint nr, size_t win);
+	void send_ack(boost::asio::ip::udp::endpoint endpoint, uint nr, size_t win);
 	void send_data(
 		boost::asio::ip::udp::endpoint endpoint,
 		uint cid,
-		uint nr, 
-		uint ack, 
+		uint nr,
+		uint ack,
 		size_t win, const std::string &data);
+
+	void send_routine();
+	void add_to_send(const std::string &message, boost::asio::ip::udp::endpoint endpoint);
+
+	std::mutex send_mutex;
+	std::queue<std::pair<std::string, boost::asio::ip::udp::endpoint> > to_send_list;
 
 	void mixer_routine();
 
@@ -76,7 +86,6 @@ private:
 
 	uint tx_interval;
 
-	mutable std::mutex clients_mutex;
 	std::unordered_map<uint, ClientObject *> clients;
 
 	boost::asio::io_service io_service;
@@ -88,8 +97,6 @@ private:
 
 	static const size_t BUFFER_SIZE            = 65536;
 	static const size_t EXPECTED_CLIENTS_LIMIT = 16;
-
-	size_t get_window_size() const;
 
 	uint current_nr;
 	std::unordered_map<uint, std::string> messages;
