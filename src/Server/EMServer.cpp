@@ -396,15 +396,12 @@ void EMServer::mixer_routine()
 	mixer_timer.expires_from_now(boost::posix_time::milliseconds(get_tx_interval()));
 	mixer_timer.async_wait(boost::bind(&EMServer::mixer_routine, this));
 
-// 	if (get_active_clients_number() == 0)
-// 		return;
-
-	size_t active_clients_number = std::min(get_active_clients_number(), (uint) BUFFER_SIZE / (get_tx_interval() * Mixer::DATA_MS_SIZE));
+	size_t active_clients_number = get_active_clients_number();//std::min(get_active_clients_number(), (uint) BUFFER_SIZE / (get_tx_interval() * Mixer::DATA_MS_SIZE));
 	Mixer::MixerInput inputs[active_clients_number];
 	uint client_number[active_clients_number];
 
 	size_t data_length = get_tx_interval() * Mixer::DATA_MS_SIZE;
-	char data[data_length * active_clients_number];
+	char data[data_length];
 
 	char input_data_array[data_length * active_clients_number];
 

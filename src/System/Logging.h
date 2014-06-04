@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#define PRINT_LEVEL 5
+#define PRINT_LEVEL 3
 
 /**
  * For printing debug messages - enabled for developing only.

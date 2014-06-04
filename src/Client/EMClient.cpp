@@ -253,10 +253,6 @@ void EMClient::server_interaction_routine()
 	boost::system::error_code error;
 	boost::array<char, BUFFER_SIZE> buf;
 
-	/** We send anything to get going */
-// 	insert_input();
-// 	manage_messages();
-
 	while (is_connected()) {
 		insert_input();
 
@@ -299,7 +295,8 @@ void EMClient::server_interaction_routine()
 					break;
 				}
 				out << output_buffer.substr(index + 1);
-				log() << "READ " << output_buffer.substr(0, index + 1);
+				log() << "READ " << output_buffer.substr(0, index) << " (" 
+					<< output_buffer.size() - index - 1 << ")\n";
 
 				if (nr > expected && nr - expected <= get_retransmit_limit()) {
 					ask_retransmit(expected);
@@ -333,9 +330,7 @@ void EMClient::manage_messages()
 			if (messages.find(i) != messages.end())
 				send_data(messages[i], i);
 		/** We don't want too many retransmits */
-		debug() << "acknowledged: " << acknowledged << "\n";
 		++acknowledged;
-		debug() << "and acknowledged: " << acknowledged << "\n";
 	} else if (window_size >= MIN_DATA_SIZE && input_buffer.size() >= MIN_DATA_SIZE) {
 		size_t length = std::min(input_buffer.size(), window_size);
 		while (length % sizeof(EM::data_t) != 0)
