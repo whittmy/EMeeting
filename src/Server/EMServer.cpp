@@ -28,7 +28,9 @@ EMServer::EMServer() :
 
 	udp_socket(io_service, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port)),
 
-	current_nr(0)
+	current_nr(0),
+
+	mixer_timer(io_service)
 {
 	ClientObject *dummy = new ClientObject(0, get_fifo_size(), get_fifo_low_watermark(),
 		get_fifo_high_watermark());
@@ -109,7 +111,7 @@ void EMServer::start()
 
 	std::thread (&EMServer::mixer_routine, this).detach();
 	std::thread (&EMServer::send_info_routine, this).detach();
-	EMServer::udp_receive_routine();
+	std::thread (&EMServer::udp_receive_routine, this).detach();
 	std::thread (&EMServer::send_routine, this).detach();
 
 	io_service.run();
@@ -369,7 +371,8 @@ void EMServer::send_routine()
 			boost::asio::ip::udp::endpoint endpoint = to_send_list.front().second;
 
 			log() << "SEND " << msg.substr(0, msg.find("\n")) << " to "
-				<< get_address_from_endpoint(endpoint) << "\n";
+				<< get_address_from_endpoint(endpoint) << " ("
+				<< msg.size() - msg.find("\n") - 1 << ")\n";
 
 			udp_socket.send_to(boost::asio::buffer(msg), endpoint, flags, ec);
 			to_send_list.pop();
@@ -390,10 +393,8 @@ void EMServer::add_to_send(const std::string &message, boost::asio::ip::udp::end
 
 void EMServer::mixer_routine()
 {
-	boost::asio::deadline_timer timer(io_service);
-
-	timer.expires_from_now(boost::posix_time::milliseconds(get_tx_interval()));
-	timer.async_wait(boost::bind(&EMServer::mixer_routine, this));
+	mixer_timer.expires_from_now(boost::posix_time::milliseconds(get_tx_interval()));
+	mixer_timer.async_wait(boost::bind(&EMServer::mixer_routine, this));
 
 	if (get_active_clients_number() == 0)
 		return;
@@ -413,9 +414,9 @@ void EMServer::mixer_routine()
 
 		if (client->is_active()) {
 			client_number[active_client] = client->get_cid();
-			std::string input_data = client->get_queue().get(data_length);
+			std::string &&input_data = client->get_queue().get(data_length);
 
-			std::memmove(input_data_array + data_length * active_client,
+			std::memcpy(input_data_array + data_length * active_client,
 				&input_data[0], input_data.size());
 
 			inputs[active_client].data   =

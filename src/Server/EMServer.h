@@ -101,6 +101,7 @@ private:
 	uint current_nr;
 	std::unordered_map<uint, std::string> messages;
 
+	boost::asio::deadline_timer mixer_timer;
 	boost::array<char, BUFFER_SIZE> input_buffer;
 };
 

@@ -332,6 +332,8 @@ void EMClient::manage_messages()
 		for (uint i = acknowledged; i < sent; ++i)
 			if (messages.find(i) != messages.end())
 				send_data(messages[i], i);
+		/** We don't want too many retransmits */
+		++acknowledged;
 	} else if (window_size >= MIN_DATA_SIZE && input_buffer.size() >= MIN_DATA_SIZE) {
 		size_t length = std::min(input_buffer.size(), window_size);
 		while (length % sizeof(EM::data_t) != 0)
